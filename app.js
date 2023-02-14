@@ -1,6 +1,6 @@
 import querystring from "node:querystring";
 import WebSocket from "ws";
-import env from "./env.js";
+import env from "./src/env.js";
 import tradeConfig from "./src/trade-config.js";
 import { binanceFuturesAPI } from "./src/axios-instances.js";
 import { sendLineNotify, log } from "./src/common.js";
