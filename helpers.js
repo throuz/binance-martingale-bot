@@ -1,20 +1,18 @@
 import crypto from "node:crypto";
 import querystring from "node:querystring";
 import env from "./env.js";
+import tradeConfig from "./trade-config.js";
 import { binanceFuturesAPI } from "./axios-instances.js";
 import { sendLineNotify } from "./common.js";
-import {
-  QUOTE_CURRENCY,
-  SYMBOL,
-  LEVERAGE,
-  TP_SL_RATE,
-  INITIAL_QUANTITY
-} from "./trade-config.js";
+
+const { SECRET_KEY } = env;
+const { QUOTE_CURRENCY, SYMBOL, LEVERAGE, TP_SL_RATE, INITIAL_QUANTITY } =
+  tradeConfig;
 
 const getQuantity = (stopLossTimes) => INITIAL_QUANTITY * 2 ** stopLossTimes;
 
 const getSignature = (queryString) =>
-  crypto.createHmac("sha256", env.SECRET_KEY).update(queryString).digest("hex");
+  crypto.createHmac("sha256", SECRET_KEY).update(queryString).digest("hex");
 
 const getAvailableBalance = async () => {
   try {

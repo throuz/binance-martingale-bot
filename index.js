@@ -1,9 +1,9 @@
 import querystring from "node:querystring";
 import WebSocket from "ws";
 import env from "./env.js";
+import tradeConfig from "./trade-config.js";
 import { binanceFuturesAPI } from "./axios-instances.js";
 import { sendLineNotify, log } from "./common.js";
-import { QUOTE_CURRENCY, SYMBOL } from "./trade-config.js";
 import {
   getQuantity,
   getSignature,
@@ -12,6 +12,9 @@ import {
   getSide,
   getAvailableQuantity
 } from "./helpers.js";
+
+const { WEBSOCKET_BASEURL } = env;
+const { QUOTE_CURRENCY, SYMBOL } = tradeConfig;
 
 let stopLossTimes = 0;
 
@@ -123,7 +126,7 @@ const setCloseConnect = (ws) => {
 };
 
 const connectWebSocket = (listenKey) => {
-  const ws = new WebSocket(`${env.WEBSOCKET_BASEURL}/ws/${listenKey}`);
+  const ws = new WebSocket(`${WEBSOCKET_BASEURL}/ws/${listenKey}`);
 
   ws.on("open", () => {
     log("Socket open!");
