@@ -1,9 +1,9 @@
 import querystring from "node:querystring";
 import WebSocket from "ws";
 import env from "./env.js";
-import tradeConfig from "./trade-config.js";
-import { binanceFuturesAPI } from "./axios-instances.js";
-import { sendLineNotify, log } from "./common.js";
+import tradeConfig from "./src/trade-config.js";
+import { binanceFuturesAPI } from "./src/axios-instances.js";
+import { sendLineNotify, log } from "./src/common.js";
 import {
   getQuantity,
   getSignature,
@@ -11,7 +11,7 @@ import {
   getTPSLPrices,
   getSide,
   getAvailableQuantity
-} from "./helpers.js";
+} from "./src/helpers.js";
 
 const { WEBSOCKET_BASEURL } = env;
 const { QUOTE_CURRENCY, SYMBOL } = tradeConfig;

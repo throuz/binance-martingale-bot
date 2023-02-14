@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import querystring from "node:querystring";
-import env from "./env.js";
+import env from "../env.js";
 import tradeConfig from "./trade-config.js";
 import { binanceFuturesAPI } from "./axios-instances.js";
 import { sendLineNotify } from "./common.js";

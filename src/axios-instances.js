@@ -1,5 +1,5 @@
 import axios from "axios";
-import env from "./env.js";
+import env from "../env.js";
 
 const { LINE_NOTIFY_TOKEN, REST_BASEURL, API_KEY } = env;
 
