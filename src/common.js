@@ -4,7 +4,7 @@ const sendLineNotify = async (msg) => {
   try {
     await lineNotifyAPI.post("/api/notify", { message: `\n${msg}` });
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
   }
 };
 

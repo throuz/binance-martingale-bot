@@ -34,7 +34,7 @@ const handleTimeInForceError = async (orders) => {
       await handleTimeInForceError(orders);
     }
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }
@@ -97,7 +97,7 @@ const newOrders = async () => {
     log(`New orders! ${side} ${quantity}`);
     await sendLineNotify(`New orders! ${side} ${quantity}`);
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }
@@ -107,7 +107,7 @@ const extendListenKeyValidity = async () => {
   try {
     await binanceFuturesAPI.put("/fapi/v1/listenKey");
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }
@@ -181,7 +181,7 @@ const connectWebSocket = (listenKey) => {
         await newOrders();
       }
     } catch (error) {
-      console.error(error);
+      console.error(error.toJSON());
       await sendLineNotify("API error, process exited!");
       process.exit();
     }
@@ -205,7 +205,7 @@ const startUserDataStream = async () => {
     connectWebSocket(response.data.listenKey);
     await newOrders();
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }

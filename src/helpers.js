@@ -28,7 +28,7 @@ const getAvailableBalance = async () => {
     ).withdrawAvailable;
     return availableBalance;
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }
@@ -45,7 +45,7 @@ const getMarkPrice = async () => {
     );
     return response.data.markPrice;
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }
@@ -82,7 +82,7 @@ const getTPSLPrices = async (side, stopLossTimes) => {
     }
     return { takeProfitPrice, stopLossPrice };
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }
@@ -99,7 +99,7 @@ const getSide = async () => {
     );
     return response.data[0].longShortRatio > 1 ? "BUY" : "SELL";
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }
@@ -113,7 +113,7 @@ const getAvailableQuantity = async () => {
     const minTradeAmount = markPrice / 1000;
     return Math.trunc(availableFunds / minTradeAmount) / 1000;
   } catch (error) {
-    console.error(error);
+    console.error(error.toJSON());
     await sendLineNotify("API error, process exited!");
     process.exit();
   }
