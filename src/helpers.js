@@ -38,10 +38,9 @@ const getMarkPrice = async () => {
   try {
     const totalParams = { symbol: SYMBOL };
     const queryString = querystring.stringify(totalParams);
-    const signature = getSignature(queryString);
 
     const response = await binanceFuturesAPI.get(
-      `/fapi/v1/premiumIndex?${queryString}&signature=${signature}`
+      `/fapi/v1/premiumIndex?${queryString}`
     );
     return response.data.markPrice;
   } catch (error) {
@@ -92,10 +91,9 @@ const getSide = async () => {
   try {
     const totalParams = { symbol: SYMBOL, period: "5m", limit: "1" };
     const queryString = querystring.stringify(totalParams);
-    const signature = getSignature(queryString);
 
     const response = await binanceFuturesAPI.get(
-      `/futures/data/topLongShortPositionRatio?${queryString}&signature=${signature}`
+      `/futures/data/topLongShortPositionRatio?${queryString}`
     );
     return response.data[0].longShortRatio > 1 ? "BUY" : "SELL";
   } catch (error) {
