@@ -12,4 +12,10 @@ const log = (msg) => {
   console.log(`${msg} [${new Date().toLocaleString()}]`);
 };
 
-export { sendLineNotify, log };
+const handleBinanceFuturesAPIError = async (error) => {
+  console.error(error.toJSON());
+  await sendLineNotify("API error, process exited!");
+  process.exit();
+};
+
+export { sendLineNotify, log, handleBinanceFuturesAPIError };

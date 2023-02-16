@@ -3,7 +3,7 @@ import querystring from "node:querystring";
 import env from "./env.js";
 import tradeConfig from "./trade-config.js";
 import { binanceFuturesAPI } from "./axios-instances.js";
-import { sendLineNotify } from "./common.js";
+import { handleBinanceFuturesAPIError } from "./common.js";
 
 const { SECRET_KEY } = env;
 const { QUOTE_CURRENCY, SYMBOL, LEVERAGE, TP_SL_RATE, INITIAL_QUANTITY } =
@@ -28,9 +28,7 @@ const getAvailableBalance = async () => {
     ).withdrawAvailable;
     return availableBalance;
   } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
+    await handleBinanceFuturesAPIError(error);
   }
 };
 
@@ -44,9 +42,7 @@ const getMarkPrice = async () => {
     );
     return response.data.markPrice;
   } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
+    await handleBinanceFuturesAPIError(error);
   }
 };
 
@@ -60,31 +56,25 @@ const getOtherSide = (side) => {
 };
 
 const getTPSLPrices = async (side, stopLossTimes) => {
-  try {
-    let takeProfitPrice;
-    let stopLossPrice;
-    const markPrice = await getMarkPrice();
-    const orderCostRate = LEVERAGE * FEE_RATE * 2; // 3%
-    const tpslRate = TP_SL_RATE + orderCostRate * (stopLossTimes + 1);
-    const higherClosingPrice = (
-      Math.round(markPrice * (1 + tpslRate / LEVERAGE) * 10) / 10
-    ).toString();
-    const lowerClosingPrice = (
-      Math.round(markPrice * (1 - tpslRate / LEVERAGE) * 10) / 10
-    ).toString();
-    if (side === "BUY") {
-      takeProfitPrice = higherClosingPrice;
-      stopLossPrice = lowerClosingPrice;
-    } else {
-      takeProfitPrice = lowerClosingPrice;
-      stopLossPrice = higherClosingPrice;
-    }
-    return { takeProfitPrice, stopLossPrice };
-  } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
+  let takeProfitPrice;
+  let stopLossPrice;
+  const markPrice = await getMarkPrice();
+  const orderCostRate = LEVERAGE * FEE_RATE * 2; // 3%
+  const tpslRate = TP_SL_RATE + orderCostRate * (stopLossTimes + 1);
+  const higherClosingPrice = (
+    Math.round(markPrice * (1 + tpslRate / LEVERAGE) * 10) / 10
+  ).toString();
+  const lowerClosingPrice = (
+    Math.round(markPrice * (1 - tpslRate / LEVERAGE) * 10) / 10
+  ).toString();
+  if (side === "BUY") {
+    takeProfitPrice = higherClosingPrice;
+    stopLossPrice = lowerClosingPrice;
+  } else {
+    takeProfitPrice = lowerClosingPrice;
+    stopLossPrice = higherClosingPrice;
   }
+  return { takeProfitPrice, stopLossPrice };
 };
 
 const getSide = async () => {
@@ -97,24 +87,16 @@ const getSide = async () => {
     );
     return response.data[0].longShortRatio > 1 ? "BUY" : "SELL";
   } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
+    await handleBinanceFuturesAPIError(error);
   }
 };
 
 const getAvailableQuantity = async () => {
-  try {
-    const availableBalance = await getAvailableBalance();
-    const markPrice = await getMarkPrice();
-    const availableFunds = availableBalance * LEVERAGE;
-    const minTradeAmount = markPrice / 1000;
-    return Math.trunc(availableFunds / minTradeAmount) / 1000;
-  } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
-  }
+  const availableBalance = await getAvailableBalance();
+  const markPrice = await getMarkPrice();
+  const availableFunds = availableBalance * LEVERAGE;
+  const minTradeAmount = markPrice / 1000;
+  return Math.trunc(availableFunds / minTradeAmount) / 1000;
 };
 
 export {

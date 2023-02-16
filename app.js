@@ -3,7 +3,11 @@ import WebSocket from "ws";
 import env from "./src/env.js";
 import tradeConfig from "./src/trade-config.js";
 import { binanceFuturesAPI } from "./src/axios-instances.js";
-import { sendLineNotify, log } from "./src/common.js";
+import {
+  sendLineNotify,
+  log,
+  handleBinanceFuturesAPIError
+} from "./src/common.js";
 import {
   getQuantity,
   getSignature,
@@ -34,9 +38,7 @@ const handleTimeInForceError = async (orders) => {
       await handleTimeInForceError(orders);
     }
   } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
+    await handleBinanceFuturesAPIError(error);
   }
 };
 
@@ -97,9 +99,7 @@ const newOrders = async () => {
     log(`New orders! ${side} ${quantity}`);
     await sendLineNotify(`New orders! ${side} ${quantity}`);
   } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
+    await handleBinanceFuturesAPIError(error);
   }
 };
 
@@ -107,9 +107,7 @@ const extendListenKeyValidity = async () => {
   try {
     await binanceFuturesAPI.put("/fapi/v1/listenKey");
   } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
+    await handleBinanceFuturesAPIError(error);
   }
 };
 
@@ -139,51 +137,45 @@ const connectWebSocket = (listenKey) => {
   });
 
   ws.on("message", async (event) => {
-    try {
-      const eventObj = JSON.parse(event);
+    const eventObj = JSON.parse(event);
 
-      if (eventObj.e === "ACCOUNT_UPDATE") {
-        const walletBalance = eventObj.a.B.find(
-          ({ a }) => a === QUOTE_CURRENCY
-        ).wb;
-        log(`Wallet balance: ${walletBalance} BUSD`);
-        await sendLineNotify(`Wallet balance: ${walletBalance} BUSD`);
-      }
+    if (eventObj.e === "ACCOUNT_UPDATE") {
+      const walletBalance = eventObj.a.B.find(
+        ({ a }) => a === QUOTE_CURRENCY
+      ).wb;
+      log(`Wallet balance: ${walletBalance} BUSD`);
+      await sendLineNotify(`Wallet balance: ${walletBalance} BUSD`);
+    }
 
-      if (
-        eventObj.e === "ORDER_TRADE_UPDATE" &&
-        eventObj.o.ot === "TAKE_PROFIT_MARKET" &&
-        eventObj.o.x === "TRADE" &&
-        eventObj.o.X === "FILLED"
-      ) {
-        log("Take profit!");
-        await sendLineNotify("Take profit!");
-        if (stopLossTimes !== 0) {
-          stopLossTimes = 0;
-        }
-        await newOrders();
+    if (
+      eventObj.e === "ORDER_TRADE_UPDATE" &&
+      eventObj.o.ot === "TAKE_PROFIT_MARKET" &&
+      eventObj.o.x === "TRADE" &&
+      eventObj.o.X === "FILLED"
+    ) {
+      log("Take profit!");
+      await sendLineNotify("Take profit!");
+      if (stopLossTimes !== 0) {
+        stopLossTimes = 0;
       }
+      await newOrders();
+    }
 
-      if (
-        eventObj.e === "ORDER_TRADE_UPDATE" &&
-        eventObj.o.ot === "STOP_MARKET" &&
-        eventObj.o.x === "TRADE" &&
-        eventObj.o.X === "FILLED"
-      ) {
-        log("Stop loss!");
-        await sendLineNotify("Stop loss!");
-        stopLossTimes += 1;
-        const quantity = getQuantity(stopLossTimes);
-        const availableQuantity = await getAvailableQuantity();
-        if (quantity > availableQuantity) {
-          stopLossTimes = 0;
-        }
-        await newOrders();
+    if (
+      eventObj.e === "ORDER_TRADE_UPDATE" &&
+      eventObj.o.ot === "STOP_MARKET" &&
+      eventObj.o.x === "TRADE" &&
+      eventObj.o.X === "FILLED"
+    ) {
+      log("Stop loss!");
+      await sendLineNotify("Stop loss!");
+      stopLossTimes += 1;
+      const quantity = getQuantity(stopLossTimes);
+      const availableQuantity = await getAvailableQuantity();
+      if (quantity > availableQuantity) {
+        stopLossTimes = 0;
       }
-    } catch (error) {
-      console.error(error.toJSON());
-      await sendLineNotify("API error, process exited!");
-      process.exit();
+      await newOrders();
     }
   });
 
@@ -205,9 +197,7 @@ const startUserDataStream = async () => {
     connectWebSocket(response.data.listenKey);
     await newOrders();
   } catch (error) {
-    console.error(error.toJSON());
-    await sendLineNotify("API error, process exited!");
-    process.exit();
+    await handleBinanceFuturesAPIError(error);
   }
 };
 
