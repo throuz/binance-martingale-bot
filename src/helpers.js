@@ -3,7 +3,7 @@ import querystring from "node:querystring";
 import env from "./env.js";
 import tradeConfig from "./trade-config.js";
 import { binanceFuturesAPI } from "./axios-instances.js";
-import { handleBinanceFuturesAPIError } from "./common.js";
+import { handleAPIError } from "./common.js";
 
 const { SECRET_KEY } = env;
 const { QUOTE_CURRENCY, SYMBOL, LEVERAGE, TP_SL_RATE, INITIAL_QUANTITY } =
@@ -28,7 +28,7 @@ const getAvailableBalance = async () => {
     ).withdrawAvailable;
     return availableBalance;
   } catch (error) {
-    await handleBinanceFuturesAPIError(error);
+    await handleAPIError(error);
   }
 };
 
@@ -42,7 +42,7 @@ const getMarkPrice = async () => {
     );
     return response.data.markPrice;
   } catch (error) {
-    await handleBinanceFuturesAPIError(error);
+    await handleAPIError(error);
   }
 };
 
@@ -87,7 +87,7 @@ const getSide = async () => {
     );
     return response.data[0].longShortRatio > 1 ? "BUY" : "SELL";
   } catch (error) {
-    await handleBinanceFuturesAPIError(error);
+    await handleAPIError(error);
   }
 };
 

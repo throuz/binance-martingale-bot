@@ -3,11 +3,7 @@ import WebSocket from "ws";
 import env from "./src/env.js";
 import tradeConfig from "./src/trade-config.js";
 import { binanceFuturesAPI } from "./src/axios-instances.js";
-import {
-  sendLineNotify,
-  log,
-  handleBinanceFuturesAPIError
-} from "./src/common.js";
+import { sendLineNotify, log, handleAPIError } from "./src/common.js";
 import {
   getQuantity,
   getSignature,
@@ -38,7 +34,7 @@ const handleTimeInForceError = async (orders) => {
       await handleTimeInForceError(orders);
     }
   } catch (error) {
-    await handleBinanceFuturesAPIError(error);
+    await handleAPIError(error);
   }
 };
 
@@ -99,7 +95,7 @@ const newOrders = async () => {
     log(`New orders! ${side} ${quantity}`);
     await sendLineNotify(`New orders! ${side} ${quantity}`);
   } catch (error) {
-    await handleBinanceFuturesAPIError(error);
+    await handleAPIError(error);
   }
 };
 
@@ -107,7 +103,7 @@ const extendListenKeyValidity = async () => {
   try {
     await binanceFuturesAPI.put("/fapi/v1/listenKey");
   } catch (error) {
-    await handleBinanceFuturesAPIError(error);
+    await handleAPIError(error);
   }
 };
 
@@ -197,7 +193,7 @@ const startUserDataStream = async () => {
     connectWebSocket(response.data.listenKey);
     await newOrders();
   } catch (error) {
-    await handleBinanceFuturesAPIError(error);
+    await handleAPIError(error);
   }
 };
 

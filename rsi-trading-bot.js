@@ -1,5 +1,6 @@
 import querystring from "node:querystring";
 import { taAPI } from "./src/axios-instances.js";
+import { handleAPIError } from "./src/common";
 
 const getRSI = async () => {
   try {
@@ -13,8 +14,7 @@ const getRSI = async () => {
     const response = await taAPI.get(`/rsi?${queryString}`);
     console.log(response.data);
   } catch (error) {
-    console.error(error.toJSON());
-    process.exit();
+    await handleAPIError(error);
   }
 };
 
