@@ -4,10 +4,9 @@ import { handleAPIError, sendLineNotify, log } from "./src/common.js";
 import {
   getSignature,
   getAvailableQuantity,
-  getOtherSide
+  getPositionAmount,
+  getMaxAllowableQuantity
 } from "./src/helpers.js";
-
-let side = "";
 
 const getRSI = async () => {
   try {
@@ -25,10 +24,14 @@ const getRSI = async () => {
   }
 };
 
-const newOrder = async () => {
+const newOrder = async (side) => {
   try {
     const availableQuantity = await getAvailableQuantity();
-    const quantity = Math.round((availableQuantity / 2) * 1000) / 1000;
+    const maxAllowableQuantity = await getMaxAllowableQuantity();
+    const quantity =
+      availableQuantity > maxAllowableQuantity
+        ? maxAllowableQuantity
+        : availableQuantity;
     const totalParams = {
       symbol: "BTCUSDT",
       type: "MARKET",
@@ -52,14 +55,14 @@ const newOrder = async () => {
   }
 };
 
-const closePosition = async (positionAmount) => {
+const closePosition = async (side, positionAmount) => {
   try {
-    const otherSide = getOtherSide(side);
+    const quantity = Math.abs(positionAmount);
     const totalParams = {
       symbol: "BTCUSDT",
       type: "MARKET",
-      side: otherSide,
-      quantity: positionAmount,
+      side,
+      quantity,
       positionSide: "BOTH",
       leverage: 125,
       isolated: false,
@@ -81,46 +84,25 @@ const closePosition = async (positionAmount) => {
   }
 };
 
-const getPositionAmount = async () => {
-  try {
-    const totalParams = { symbol: "BTCUSDT", timestamp: Date.now() };
-    const queryString = querystring.stringify(totalParams);
-    const signature = getSignature(queryString);
-
-    const response = await binanceFuturesAPI.get(
-      `/fapi/v2/positionRisk?${queryString}&signature=${signature}`
-    );
-    return response.data[0].positionAmt;
-  } catch (error) {
-    await handleAPIError(error);
-  }
-};
-
 const trade = async () => {
   const RSI = await getRSI();
   log(`RSI: ${RSI}`);
   if (RSI > 70) {
-    if (side === "SELL") {
-      await newOrder();
-    } else {
-      const positionAmount = await getPositionAmount();
-      if (positionAmount > 0) {
-        await closePosition(positionAmount);
-      }
-      side = "SELL";
-      await newOrder();
+    const positionAmount = await getPositionAmount();
+    if (+positionAmount === 0) {
+      await newOrder("SELL");
+    } else if (positionAmount < 0) {
+      await closePosition("BUY", positionAmount);
+      await newOrder("SELL");
     }
   }
   if (RSI < 30) {
-    if (side === "BUY") {
-      await newOrder();
-    } else {
-      const positionAmount = await getPositionAmount();
-      if (positionAmount > 0) {
-        await closePosition(positionAmount);
-      }
-      side = "BUY";
-      await newOrder();
+    const positionAmount = await getPositionAmount();
+    if (+positionAmount === 0) {
+      await newOrder("BUY");
+    } else if (positionAmount > 0) {
+      await closePosition("SELL", positionAmount);
+      await newOrder("BUY");
     }
   }
 };
