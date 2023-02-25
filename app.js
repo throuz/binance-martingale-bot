@@ -14,7 +14,7 @@ import {
 } from "./src/helpers.js";
 
 const { WEBSOCKET_BASEURL } = env;
-const { QUOTE_CURRENCY, SYMBOL } = tradeConfig;
+const { QUOTE_ASSET, SYMBOL } = tradeConfig;
 
 let stopLossTimes = 0;
 
@@ -136,9 +136,7 @@ const connectWebSocket = (listenKey) => {
     const eventObj = JSON.parse(event);
 
     if (eventObj.e === "ACCOUNT_UPDATE") {
-      const walletBalance = eventObj.a.B.find(
-        ({ a }) => a === QUOTE_CURRENCY
-      ).wb;
+      const walletBalance = eventObj.a.B.find(({ a }) => a === QUOTE_ASSET).wb;
       log(`Wallet balance: ${walletBalance} BUSD`);
       await sendLineNotify(`Wallet balance: ${walletBalance} BUSD`);
     }

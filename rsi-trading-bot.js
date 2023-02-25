@@ -4,14 +4,17 @@ import { handleAPIError, sendLineNotify, log } from "./src/common.js";
 import {
   getSignature,
   getAvailableQuantity,
-  getPositionAmount,
-  getMaxAllowableQuantity
+  getPositionAmount
 } from "./src/helpers.js";
+import tradeConfig from "./src/trade-config.js";
+
+const { BASE_ASSET, QUOTE_ASSET, SYMBOL } = tradeConfig;
 
 const getRSI = async () => {
   try {
     const totalParams = {
       exchange: "binance",
+      // symbol: `${BASE_ASSET}/${QUOTE_ASSET}`,
       symbol: "BTC/USDT",
       interval: "1m"
     };
@@ -27,13 +30,9 @@ const getRSI = async () => {
 const newOrder = async (side) => {
   try {
     const availableQuantity = await getAvailableQuantity();
-    const maxAllowableQuantity = await getMaxAllowableQuantity();
-    const quantity =
-      availableQuantity > maxAllowableQuantity
-        ? maxAllowableQuantity
-        : availableQuantity;
+    const quantity = Math.trunc((availableQuantity / 2) * 1000) / 1000;
     const totalParams = {
-      symbol: "BTCUSDT",
+      symbol: SYMBOL,
       type: "MARKET",
       side,
       positionSide: "BOTH",
@@ -59,7 +58,7 @@ const closePosition = async (side, positionAmount) => {
   try {
     const quantity = Math.abs(positionAmount);
     const totalParams = {
-      symbol: "BTCUSDT",
+      symbol: SYMBOL,
       type: "MARKET",
       side,
       quantity,
@@ -89,20 +88,20 @@ const trade = async () => {
   log(`RSI: ${RSI}`);
   if (RSI > 70) {
     const positionAmount = await getPositionAmount();
-    if (+positionAmount === 0) {
+    if (positionAmount > 0) {
+      await closePosition("SELL", positionAmount);
       await newOrder("SELL");
-    } else if (positionAmount < 0) {
-      await closePosition("BUY", positionAmount);
+    } else {
       await newOrder("SELL");
     }
   }
   if (RSI < 30) {
     const positionAmount = await getPositionAmount();
-    if (+positionAmount === 0) {
+    if (positionAmount < 0) {
+      await closePosition("BUY", positionAmount);
       await newOrder("BUY");
-    } else if (positionAmount > 0) {
-      await closePosition("SELL", positionAmount);
-      await newOrder("BUY");
+    } else {
+      await newOrder("SELL");
     }
   }
 };

@@ -6,8 +6,14 @@ import { binanceFuturesAPI } from "./axios-instances.js";
 import { handleAPIError } from "./common.js";
 
 const { SECRET_KEY } = env;
-const { QUOTE_CURRENCY, SYMBOL, LEVERAGE, TP_SL_RATE, INITIAL_QUANTITY } =
-  tradeConfig;
+const {
+  QUOTE_ASSET,
+  SYMBOL,
+  LEVERAGE,
+  FEE_RATE,
+  TP_SL_RATE,
+  INITIAL_QUANTITY
+} = tradeConfig;
 
 const getQuantity = (stopLossTimes) => INITIAL_QUANTITY * 2 ** stopLossTimes;
 
@@ -24,7 +30,7 @@ const getAvailableBalance = async () => {
       `/fapi/v1/balance?${queryString}&signature=${signature}`
     );
     const availableBalance = response.data.find(
-      ({ asset }) => asset === QUOTE_CURRENCY
+      ({ asset }) => asset === QUOTE_ASSET
     ).withdrawAvailable;
     return availableBalance;
   } catch (error) {
