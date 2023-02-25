@@ -10,18 +10,28 @@ import tradeConfig from "./src/trade-config.js";
 
 const { BASE_ASSET, QUOTE_ASSET, SYMBOL } = tradeConfig;
 
-const getRSI = async () => {
+const getSignal = async () => {
   try {
     const totalParams = {
       exchange: "binance",
       // symbol: `${BASE_ASSET}/${QUOTE_ASSET}`,
       symbol: "BTC/USDT",
-      interval: "1m"
+      interval: "1m",
+      backtracks: 2
     };
     const queryString = querystring.stringify(totalParams);
 
     const response = await taAPI.get(`/rsi?${queryString}`);
-    return response.data.value;
+    const currentRSI = response.data[0].value;
+    log(`RSI: ${currentRSI}`);
+    const previousRSI = response.data[1].value;
+    if (currentRSI < 30 && previousRSI > 30) {
+      return "BUY";
+    } else if (currentRSI > 70 && previousRSI < 70) {
+      return "SELL";
+    } else {
+      return "NONE";
+    }
   } catch (error) {
     await handleAPIError(error);
   }
@@ -84,9 +94,17 @@ const closePosition = async (side, positionAmount) => {
 };
 
 const trade = async () => {
-  const RSI = await getRSI();
-  log(`RSI: ${RSI}`);
-  if (RSI > 70) {
+  const signal = await getSignal();
+  if (signal === "BUY") {
+    const positionAmount = await getPositionAmount();
+    if (positionAmount < 0) {
+      await closePosition("BUY", positionAmount);
+      await newOrder("BUY");
+    } else {
+      await newOrder("BUY");
+    }
+  }
+  if (signal === "SELL") {
     const positionAmount = await getPositionAmount();
     if (positionAmount > 0) {
       await closePosition("SELL", positionAmount);
@@ -95,16 +113,7 @@ const trade = async () => {
       await newOrder("SELL");
     }
   }
-  if (RSI < 30) {
-    const positionAmount = await getPositionAmount();
-    if (positionAmount < 0) {
-      await closePosition("BUY", positionAmount);
-      await newOrder("BUY");
-    } else {
-      await newOrder("SELL");
-    }
-  }
 };
 
 trade();
-setInterval(trade, 20000);
+setInterval(trade, 60000);
