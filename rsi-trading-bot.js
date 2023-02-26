@@ -10,28 +10,29 @@ import tradeConfig from "./src/trade-config.js";
 
 const { BASE_ASSET, QUOTE_ASSET, SYMBOL } = tradeConfig;
 
+let previousRSI;
+
 const getSignal = async () => {
   try {
     const totalParams = {
       exchange: "binance",
       // symbol: `${BASE_ASSET}/${QUOTE_ASSET}`,
       symbol: "BTC/USDT",
-      interval: "1m",
-      backtracks: 2
+      interval: "1m"
     };
     const queryString = querystring.stringify(totalParams);
 
     const response = await taAPI.get(`/rsi?${queryString}`);
-    const currentRSI = response.data[0].value;
-    const previousRSI = response.data[1].value;
-    log(`currentRSI: ${currentRSI}, previousRSI: ${previousRSI}`);
+    const currentRSI = response.data.value;
+    let signal = "NONE";
     if (previousRSI > 30 && currentRSI < 30) {
-      return "BUY";
-    } else if (previousRSI < 70 && currentRSI > 70) {
-      return "SELL";
-    } else {
-      return "NONE";
+      signal = "BUY";
     }
+    if (previousRSI < 70 && currentRSI > 70) {
+      signal = "SELL";
+    }
+    previousRSI = currentRSI;
+    return signal;
   } catch (error) {
     await handleAPIError(error);
   }
