@@ -23,11 +23,11 @@ const getSignal = async () => {
 
     const response = await taAPI.get(`/rsi?${queryString}`);
     const currentRSI = response.data[0].value;
-    log(`RSI: ${currentRSI}`);
     const previousRSI = response.data[1].value;
-    if (currentRSI < 30 && previousRSI > 30) {
+    log(`currentRSI: ${currentRSI}, previousRSI: ${previousRSI}`);
+    if (previousRSI > 30 && currentRSI < 30) {
       return "BUY";
-    } else if (currentRSI > 70 && previousRSI < 70) {
+    } else if (previousRSI < 70 && currentRSI > 70) {
       return "SELL";
     } else {
       return "NONE";
@@ -37,10 +37,8 @@ const getSignal = async () => {
   }
 };
 
-const newOrder = async (side) => {
+const newOrder = async (side, quantity) => {
   try {
-    const availableQuantity = await getAvailableQuantity();
-    const quantity = Math.trunc((availableQuantity / 2) * 1000) / 1000;
     const totalParams = {
       symbol: SYMBOL,
       type: "MARKET",
@@ -48,7 +46,6 @@ const newOrder = async (side) => {
       positionSide: "BOTH",
       quantity,
       reduceOnly: false,
-      placeType: "order-form",
       timestamp: Date.now()
     };
     const queryString = querystring.stringify(totalParams);
@@ -64,20 +61,16 @@ const newOrder = async (side) => {
   }
 };
 
-const closePosition = async (side, positionAmount) => {
+const closePosition = async (side, quantity) => {
   try {
-    const quantity = Math.abs(positionAmount);
     const totalParams = {
       symbol: SYMBOL,
       type: "MARKET",
       side,
       quantity,
       positionSide: "BOTH",
-      leverage: 125,
-      isolated: false,
       reduceOnly: true,
       newOrderRespType: "RESULT",
-      placeType: "position",
       timestamp: Date.now()
     };
     const queryString = querystring.stringify(totalParams);
@@ -93,24 +86,37 @@ const closePosition = async (side, positionAmount) => {
   }
 };
 
+const getQuantity = async () => {
+  const availableQuantity = await getAvailableQuantity();
+  return Math.trunc((availableQuantity / 2) * 1000) / 1000;
+};
+
 const trade = async () => {
   const signal = await getSignal();
   if (signal === "BUY") {
     const positionAmount = await getPositionAmount();
     if (positionAmount < 0) {
-      await closePosition("BUY", positionAmount);
-      await newOrder("BUY");
+      await closePosition("BUY", -positionAmount);
+      const quantity = await getQuantity();
+      await newOrder("BUY", quantity);
     } else {
-      await newOrder("BUY");
+      const quantity = await getQuantity();
+      if (quantity > 0) {
+        await newOrder("BUY", quantity);
+      }
     }
   }
   if (signal === "SELL") {
     const positionAmount = await getPositionAmount();
     if (positionAmount > 0) {
       await closePosition("SELL", positionAmount);
-      await newOrder("SELL");
+      const quantity = await getQuantity();
+      await newOrder("SELL", quantity);
     } else {
-      await newOrder("SELL");
+      const quantity = await getQuantity();
+      if (quantity > 0) {
+        await newOrder("SELL", quantity);
+      }
     }
   }
 };
