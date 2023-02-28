@@ -4,7 +4,9 @@ import { handleAPIError, sendLineNotify, log } from "./src/common.js";
 import {
   getSignature,
   getAvailableQuantity,
-  getPositionAmount
+  getPositionAmount,
+  getAllowableQuantity,
+  getOppositeSide
 } from "./src/helpers.js";
 import tradeConfig from "./src/trade-config.js";
 
@@ -24,11 +26,12 @@ const getSignal = async () => {
 
     const response = await taAPI.get(`/rsi?${queryString}`);
     const currentRSI = response.data.value;
+    log(`currentRSI: ${currentRSI}`);
     let signal = "NONE";
-    if (previousRSI > 30 && currentRSI < 30) {
+    if (previousRSI > 20 && currentRSI < 20) {
       signal = "BUY";
     }
-    if (previousRSI < 70 && currentRSI > 70) {
+    if (previousRSI < 80 && currentRSI > 80) {
       signal = "SELL";
     }
     previousRSI = currentRSI;
@@ -87,40 +90,51 @@ const closePosition = async (side, quantity) => {
   }
 };
 
-const getQuantity = async () => {
+const getOrderQuantity = async () => {
   const availableQuantity = await getAvailableQuantity();
-  return Math.trunc((availableQuantity / 2) * 1000) / 1000;
+  const allowableQuantity = await getAllowableQuantity();
+  const targetQuantity = Math.min(availableQuantity, allowableQuantity);
+  return Math.trunc((targetQuantity / 2) * 1000) / 1000;
 };
 
-const trade = async () => {
+const getPositionDirection = (positionAmount) => {
+  if (positionAmount === 0) {
+    return "NONE";
+  }
+  if (positionAmount > 0) {
+    return "BUY";
+  }
+  if (positionAmount < 0) {
+    return "SELL";
+  }
+};
+
+const check = async () => {
   const signal = await getSignal();
-  if (signal === "BUY") {
+  if (signal !== "NONE") {
     const positionAmount = await getPositionAmount();
-    if (positionAmount < 0) {
-      await closePosition("BUY", -positionAmount);
-      const quantity = await getQuantity();
-      await newOrder("BUY", quantity);
-    } else {
-      const quantity = await getQuantity();
-      if (quantity > 0) {
-        await newOrder("BUY", quantity);
+    const positionDirection = getPositionDirection(Number(positionAmount));
+    const oppositeSide = getOppositeSide(signal);
+
+    if (positionDirection === "NONE") {
+      const orderQuantity = await getOrderQuantity();
+      await newOrder(signal, orderQuantity);
+    }
+
+    if (positionDirection === signal) {
+      const orderQuantity = await getOrderQuantity();
+      if (orderQuantity > 0) {
+        await newOrder(signal, orderQuantity);
       }
     }
-  }
-  if (signal === "SELL") {
-    const positionAmount = await getPositionAmount();
-    if (positionAmount > 0) {
-      await closePosition("SELL", positionAmount);
-      const quantity = await getQuantity();
-      await newOrder("SELL", quantity);
-    } else {
-      const quantity = await getQuantity();
-      if (quantity > 0) {
-        await newOrder("SELL", quantity);
-      }
+
+    if (positionDirection === oppositeSide) {
+      await closePosition(signal, Math.abs(positionAmount));
+      const orderQuantity = await getOrderQuantity();
+      await newOrder(signal, orderQuantity);
     }
   }
+  setTimeout(check, 60000);
 };
 
-trade();
-setInterval(trade, 60000);
+check();

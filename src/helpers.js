@@ -52,7 +52,7 @@ const getMarkPrice = async () => {
   }
 };
 
-const getOtherSide = (side) => {
+const getOppositeSide = (side) => {
   if (side === "BUY") {
     return "SELL";
   }
@@ -101,8 +101,7 @@ const getAvailableQuantity = async () => {
   const availableBalance = await getAvailableBalance();
   const markPrice = await getMarkPrice();
   const availableFunds = availableBalance * LEVERAGE;
-  const minTradeAmount = markPrice / 1000;
-  return Math.trunc(availableFunds / minTradeAmount) / 1000;
+  return Math.trunc((availableFunds / markPrice) * 1000) / 1000;
 };
 
 const getPositionAmount = async () => {
@@ -146,16 +145,36 @@ const getMaxAllowableQuantity = async () => {
   return Math.trunc(maxNotionalValue / minTradeAmount) / 1000;
 };
 
+const getAllowableQuantity = async () => {
+  try {
+    const totalParams = { symbol: SYMBOL, timestamp: Date.now() };
+    const queryString = querystring.stringify(totalParams);
+    const signature = getSignature(queryString);
+
+    const response = await binanceFuturesAPI.get(
+      `/fapi/v2/positionRisk?${queryString}&signature=${signature}`
+    );
+    const { maxNotionalValue, positionAmt } = response.data[0];
+    const markPrice = await getMarkPrice();
+    const maxAllowableQuantity =
+      Math.trunc((maxNotionalValue / markPrice) * 1000) / 1000;
+    return maxAllowableQuantity - Math.abs(positionAmt);
+  } catch (error) {
+    await handleAPIError(error);
+  }
+};
+
 export {
   getQuantity,
   getSignature,
   getAvailableBalance,
   getMarkPrice,
-  getOtherSide,
+  getOppositeSide,
   getTPSLPrices,
   getSide,
   getAvailableQuantity,
   getPositionAmount,
   getMaxNotionalValue,
-  getMaxAllowableQuantity
+  getMaxAllowableQuantity,
+  getAllowableQuantity
 };

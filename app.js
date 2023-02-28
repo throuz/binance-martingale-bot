@@ -7,7 +7,7 @@ import { sendLineNotify, log, handleAPIError } from "./src/common.js";
 import {
   getQuantity,
   getSignature,
-  getOtherSide,
+  getOppositeSide,
   getTPSLPrices,
   getSide,
   getAvailableQuantity
@@ -41,7 +41,7 @@ const handleTimeInForceError = async (orders) => {
 const newOrders = async () => {
   try {
     const side = await getSide();
-    const otherSide = getOtherSide(side);
+    const oppositeSide = getOppositeSide(side);
     const quantity = getQuantity(stopLossTimes).toString();
     const { takeProfitPrice, stopLossPrice } = await getTPSLPrices(
       side,
@@ -57,7 +57,7 @@ const newOrders = async () => {
     };
     const takeProfitOrder = {
       symbol: SYMBOL,
-      side: otherSide,
+      side: oppositeSide,
       positionSide: "BOTH",
       type: "TAKE_PROFIT_MARKET",
       timeInForce: "GTE_GTC",
@@ -67,7 +67,7 @@ const newOrders = async () => {
     };
     const stopLossOrder = {
       symbol: SYMBOL,
-      side: otherSide,
+      side: oppositeSide,
       positionSide: "BOTH",
       type: "STOP_MARKET",
       timeInForce: "GTE_GTC",
