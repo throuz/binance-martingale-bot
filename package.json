@@ -4,8 +4,8 @@
     "ws": "^8.12.0"
   },
   "scripts": {
-    "startDev": "TZ=Asia/Taipei NODE_ENV=development node app",
-    "start": "TZ=Asia/Taipei NODE_ENV=production node app"
+    "start:dev": "TZ=Asia/Taipei NODE_ENV=development node app",
+    "start:prod": "TZ=Asia/Taipei NODE_ENV=production node app"
   },
   "type": "module"
 }
