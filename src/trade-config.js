@@ -1,7 +1,9 @@
-import { readFile } from "node:fs/promises";
-
-const filePath = new URL("./trade-config.json", import.meta.url);
-const contents = await readFile(filePath, { encoding: "utf8" });
-const tradeConfig = JSON.parse(contents);
-
-export default tradeConfig;
+export default {
+  BASE_ASSET: "BTC",
+  QUOTE_ASSET: "USDT",
+  SYMBOL: "BTCUSDT",
+  LEVERAGE: 125,
+  FEE_RATE: 0.0004,
+  TP_SL_RATE: 0.1,
+  INITIAL_QUANTITY: 0.001
+};
