@@ -12,8 +12,6 @@ import tradeConfig from "./src/trade-config.js";
 
 const { BASE_ASSET, QUOTE_ASSET, SYMBOL } = tradeConfig;
 
-let previousRSI;
-
 const getSignal = async () => {
   try {
     const totalParams = {
@@ -25,17 +23,15 @@ const getSignal = async () => {
     const queryString = querystring.stringify(totalParams);
 
     const response = await taAPI.get(`/rsi?${queryString}`);
-    const currentRSI = response.data.value;
-    log(`currentRSI: ${currentRSI}`);
-    let signal = "NONE";
-    if (previousRSI > 20 && currentRSI < 20) {
-      signal = "BUY";
+    const RSI = response.data.value;
+    log(`RSI: ${RSI}`);
+    if (RSI < 30) {
+      return "BUY";
     }
-    if (previousRSI < 80 && currentRSI > 80) {
-      signal = "SELL";
+    if (RSI > 70) {
+      return "SELL";
     }
-    previousRSI = currentRSI;
-    return signal;
+    return "NONE";
   } catch (error) {
     await handleAPIError(error);
   }
@@ -93,8 +89,7 @@ const closePosition = async (side, quantity) => {
 const getOrderQuantity = async () => {
   const availableQuantity = await getAvailableQuantity();
   const allowableQuantity = await getAllowableQuantity();
-  const targetQuantity = Math.min(availableQuantity, allowableQuantity);
-  return Math.trunc((targetQuantity / 2) * 1000) / 1000;
+  return Math.min(availableQuantity, allowableQuantity) === 0 ? 0 : 0.001;
 };
 
 const getPositionDirection = (positionAmount) => {
@@ -125,6 +120,8 @@ const check = async () => {
       const orderQuantity = await getOrderQuantity();
       if (orderQuantity > 0) {
         await newOrder(signal, orderQuantity);
+      } else {
+        log("Insufficient quantity, unable to place an order!");
       }
     }
 
@@ -137,4 +134,4 @@ const check = async () => {
   setTimeout(check, 60000);
 };
 
-check();
+// check();
