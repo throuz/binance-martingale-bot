@@ -1,41 +1,17 @@
 import querystring from "node:querystring";
-import { binanceFuturesAPI, taAPI } from "./src/axios-instances.js";
+import { binanceFuturesAPI } from "./src/axios-instances.js";
 import { handleAPIError, sendLineNotify, log } from "./src/common.js";
 import {
   getSignature,
-  getAvailableQuantity,
   getPositionAmount,
-  getAllowableQuantity,
-  getOppositeSide
+  getOppositeSide,
+  getSignal,
+  getOrderQuantity,
+  getPositionDirection
 } from "./src/helpers.js";
 import tradeConfig from "./src/trade-config.js";
 
-const { BASE_ASSET, QUOTE_ASSET, SYMBOL } = tradeConfig;
-
-const getSignal = async () => {
-  try {
-    const totalParams = {
-      exchange: "binance",
-      // symbol: `${BASE_ASSET}/${QUOTE_ASSET}`,
-      symbol: "BTC/USDT",
-      interval: "1m"
-    };
-    const queryString = querystring.stringify(totalParams);
-
-    const response = await taAPI.get(`/rsi?${queryString}`);
-    const RSI = response.data.value;
-    log(`RSI: ${RSI}`);
-    if (RSI < 30) {
-      return "BUY";
-    }
-    if (RSI > 70) {
-      return "SELL";
-    }
-    return "NONE";
-  } catch (error) {
-    await handleAPIError(error);
-  }
-};
+const { SYMBOL } = tradeConfig;
 
 const newOrder = async (side, quantity) => {
   try {
@@ -86,24 +62,6 @@ const closePosition = async (side, quantity) => {
   }
 };
 
-const getOrderQuantity = async () => {
-  const availableQuantity = await getAvailableQuantity();
-  const allowableQuantity = await getAllowableQuantity();
-  return Math.min(availableQuantity, allowableQuantity) === 0 ? 0 : 0.001;
-};
-
-const getPositionDirection = (positionAmount) => {
-  if (positionAmount === 0) {
-    return "NONE";
-  }
-  if (positionAmount > 0) {
-    return "BUY";
-  }
-  if (positionAmount < 0) {
-    return "SELL";
-  }
-};
-
 const check = async () => {
   const signal = await getSignal();
   if (signal !== "NONE") {
@@ -134,4 +92,4 @@ const check = async () => {
   setTimeout(check, 60000);
 };
 
-// check();
+check();

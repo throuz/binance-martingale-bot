@@ -2,11 +2,12 @@ import crypto from "node:crypto";
 import querystring from "node:querystring";
 import env from "./env.js";
 import tradeConfig from "./trade-config.js";
-import { binanceFuturesAPI } from "./axios-instances.js";
+import { binanceFuturesAPI, taAPI } from "./axios-instances.js";
 import { handleAPIError } from "./common.js";
 
 const { SECRET_KEY } = env;
 const {
+  BASE_ASSET,
   QUOTE_ASSET,
   SYMBOL,
   LEVERAGE,
@@ -164,6 +165,48 @@ const getAllowableQuantity = async () => {
   }
 };
 
+const getSignal = async () => {
+  try {
+    const totalParams = {
+      exchange: "binance",
+      symbol: `${BASE_ASSET}/${QUOTE_ASSET}`,
+      interval: "1m"
+    };
+    const queryString = querystring.stringify(totalParams);
+
+    const response = await taAPI.get(`/rsi?${queryString}`);
+    const RSI = response.data.value;
+    log(`RSI: ${RSI}`);
+    if (RSI < 30) {
+      return "BUY";
+    }
+    if (RSI > 70) {
+      return "SELL";
+    }
+    return "NONE";
+  } catch (error) {
+    await handleAPIError(error);
+  }
+};
+
+const getOrderQuantity = async () => {
+  const availableQuantity = await getAvailableQuantity();
+  const allowableQuantity = await getAllowableQuantity();
+  return Math.min(availableQuantity, allowableQuantity) === 0 ? 0 : 0.001;
+};
+
+const getPositionDirection = (positionAmount) => {
+  if (positionAmount === 0) {
+    return "NONE";
+  }
+  if (positionAmount > 0) {
+    return "BUY";
+  }
+  if (positionAmount < 0) {
+    return "SELL";
+  }
+};
+
 export {
   getQuantity,
   getSignature,
@@ -176,5 +219,8 @@ export {
   getPositionAmount,
   getMaxNotionalValue,
   getMaxAllowableQuantity,
-  getAllowableQuantity
+  getAllowableQuantity,
+  getSignal,
+  getOrderQuantity,
+  getPositionDirection
 };
