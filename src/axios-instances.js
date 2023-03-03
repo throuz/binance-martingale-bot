@@ -1,7 +1,7 @@
 import axios from "axios";
 import env from "./env.js";
 
-const { LINE_NOTIFY_TOKEN, REST_BASEURL, API_KEY, TAAPI_API_KEY } = env;
+const { LINE_NOTIFY_TOKEN, REST_BASEURL, API_KEY } = env;
 
 const lineNotifyAPI = axios.create({
   baseURL: "https://notify-api.line.me",
@@ -16,11 +16,4 @@ const binanceFuturesAPI = axios.create({
   headers: { "X-MBX-APIKEY": API_KEY }
 });
 
-const taAPI = axios.create({
-  baseURL: "https://api.taapi.io",
-  params: {
-    secret: TAAPI_API_KEY
-  }
-});
-
-export { lineNotifyAPI, binanceFuturesAPI, taAPI };
+export { lineNotifyAPI, binanceFuturesAPI };
