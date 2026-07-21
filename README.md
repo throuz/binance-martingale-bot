@@ -24,7 +24,7 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
 ```
 
-(`REST_BASEURL`/`WEBSOCKET_BASEURL` aren't in the env files — they only ever take one of two fixed values, so `src/config.js` picks the right pair automatically based on `NODE_ENV`, which the npm scripts already set.)
+(`REST_BASEURL`/`WEBSOCKET_BASEURL` aren't in the env files — they only ever take one of two fixed values, so `src/config.js` picks the right pair automatically based on `BINANCE_NETWORK`, which the npm scripts already set.)
 
 Run the strategy and risk-control tests with:
 
@@ -40,8 +40,8 @@ npm test
 The npm scripts load the right file automatically via Node's built-in `--env-file` flag — no extra config-loading code needed:
 
 ```
-"start:dev": "TZ=Asia/Taipei NODE_ENV=development node --env-file=.env.testnet app",
-"start:prod": "TZ=Asia/Taipei NODE_ENV=production node --env-file=.env.mainnet app"
+"start:testnet": "TZ=Asia/Taipei BINANCE_NETWORK=testnet node --env-file=.env.testnet app",
+"start:mainnet": "TZ=Asia/Taipei BINANCE_NETWORK=mainnet node --env-file=.env.mainnet app"
 ```
 
 ## Strategy

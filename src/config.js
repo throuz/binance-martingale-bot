@@ -1,9 +1,9 @@
 const BINANCE_URLS = {
-  production: {
+  mainnet: {
     REST_BASEURL: "https://fapi.binance.com",
     WEBSOCKET_BASEURL: "wss://fstream.binance.com"
   },
-  development: {
+  testnet: {
     REST_BASEURL: "https://testnet.binancefuture.com",
     WEBSOCKET_BASEURL: "wss://stream.binancefuture.com"
   }
@@ -22,13 +22,21 @@ for (const key of REQUIRED_ENV_VARS) {
   }
 }
 
-const urls = BINANCE_URLS[process.env.NODE_ENV] ?? BINANCE_URLS.development;
+const network = process.env.BINANCE_NETWORK;
+const urls = BINANCE_URLS[network];
+
+if (!urls) {
+  throw new Error(
+    `BINANCE_NETWORK must be "testnet" or "mainnet", received: ${network ?? "undefined"}`
+  );
+}
 
 const env = {
   API_KEY: process.env.API_KEY,
   SECRET_KEY: process.env.SECRET_KEY,
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
   TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
+  BINANCE_NETWORK: network,
   ...urls
 };
 
