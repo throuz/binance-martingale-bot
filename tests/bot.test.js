@@ -113,6 +113,23 @@ test("a stop loss advances the martingale quantity", async (t) => {
   assert.ok(calls.some((call) => call[0] === "entry" && call[2] === "0.002"));
 });
 
+test("an unaffordable martingale step resets to the initial quantity", async (t) => {
+  const { calls, state, exchange, notifier } = createDependencies();
+  const bot = createBot({ exchange, notifier, log: () => {}, tradeConfig });
+  t.after(bot.stop);
+  await bot.start();
+  calls.length = 0;
+  state.position = null;
+  exchange.getAvailableBalance = async () => "1";
+
+  await bot.handleEvent({
+    e: "ORDER_TRADE_UPDATE",
+    o: { ot: "STOP_MARKET", x: "TRADE", X: "FILLED" }
+  });
+
+  assert.ok(calls.some((call) => call[0] === "entry" && call[2] === "0.001"));
+});
+
 test("protection failure closes the position", async () => {
   const { calls, exchange, notifier } = createDependencies();
   exchange.placeAlgoOrder = async () => {

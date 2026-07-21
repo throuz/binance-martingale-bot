@@ -104,7 +104,9 @@ INITIAL_QUANTITY: 0.001
 ```text
 app.js                    Entry point
 src/application.js        Process lifecycle
-src/bot.js                Trading and reconciliation
+src/bot.js                Martingale state and event routing
+src/trader.js             Entries, protection, and emergency exits
+src/reconciler.js         Account setup and state repair
 src/user-data-stream.js   WebSocket lifecycle
 src/exchange.js           Binance REST API
 src/notifier.js           Telegram notifications
