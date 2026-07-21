@@ -84,6 +84,22 @@ const getMinimumQuantity = (
     stepSize
   );
 
+const getStrategyPreview = (markPrice, config) => {
+  const positionNotional = config.INITIAL_QUANTITY * Number(markPrice);
+  const initialMargin = positionNotional / config.LEVERAGE;
+  const estimatedCycleProfit = initialMargin * config.TP_SL_RATE;
+  const roundTripFee = positionNotional * config.FEE_RATE * 2;
+  const firstTriggerRate =
+    config.TP_SL_RATE / config.LEVERAGE + config.FEE_RATE * 2;
+  return {
+    positionNotional,
+    initialMargin,
+    estimatedCycleProfit,
+    roundTripFee,
+    firstTriggerRate
+  };
+};
+
 const getNextStopLossTimes = (
   currentStopLossTimes,
   availableQuantity,
@@ -105,5 +121,6 @@ export {
   getSideFromLongShortRatio,
   getAvailableQuantity,
   getMinimumQuantity,
+  getStrategyPreview,
   getNextStopLossTimes
 };

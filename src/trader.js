@@ -6,6 +6,7 @@ import {
   getSide,
   getAvailableQuantity,
   getMinimumQuantity,
+  getStrategyPreview,
   getNextStopLossTimes,
   normalizeQuantity
 } from "./strategy.js";
@@ -73,6 +74,18 @@ const createTrader = ({
       `Loaded ${tradeConfig.SYMBOL}: ${runtimeConfig.INITIAL_QUANTITY} minimum quantity, ` +
         `${runtimeConfig.LEVERAGE}x leverage, ${runtimeConfig.QUOTE_ASSET} collateral.`
     );
+    const preview = getStrategyPreview(markPrice, runtimeConfig);
+    const format = (value, digits = 4) => Number(value).toFixed(digits);
+    const summary =
+      `Strategy preview: ${runtimeConfig.INITIAL_QUANTITY} ${tradeConfig.SYMBOL.replace(runtimeConfig.QUOTE_ASSET, "")}, ` +
+      `${format(preview.positionNotional)} ${runtimeConfig.QUOTE_ASSET} notional, ` +
+      `${format(preview.initialMargin)} ${runtimeConfig.QUOTE_ASSET} margin, ` +
+      `~${format(preview.roundTripFee)} ${runtimeConfig.QUOTE_ASSET} round-trip fee, ` +
+      `~${format(preview.estimatedCycleProfit)} ${runtimeConfig.QUOTE_ASSET} net target per completed cycle, ` +
+      `${format(preview.firstTriggerRate * 100, 3)}% first trigger distance, ` +
+      `${runtimeConfig.DIRECTION_MODE} direction.`;
+    log(summary);
+    await notifier.notify(summary);
   };
 
   const getRuntimeConfig = () => runtimeConfig;

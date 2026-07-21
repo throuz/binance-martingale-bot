@@ -8,6 +8,7 @@ import {
   getSideFromLongShortRatio,
   getAvailableQuantity,
   getMinimumQuantity,
+  getStrategyPreview,
   getNextStopLossTimes,
   normalizeQuantity,
   normalizePrice
@@ -61,6 +62,24 @@ test("quantity and price follow exchange step sizes", () => {
 test("minimum quantity satisfies quantity and notional filters", () => {
   assert.equal(getMinimumQuantity("0.001", "5", "100000", "0.001"), "0.001");
   assert.equal(getMinimumQuantity("0.01", "5", "20", "0.01"), "0.25");
+});
+
+test("strategy preview estimates one completed cycle", () => {
+  assert.deepEqual(
+    getStrategyPreview(100000, {
+      INITIAL_QUANTITY: 0.001,
+      LEVERAGE: 125,
+      FEE_RATE: 0.0004,
+      TP_SL_RATE: 0.1
+    }),
+    {
+      positionNotional: 100,
+      initialMargin: 0.8,
+      estimatedCycleProfit: 0.08000000000000002,
+      roundTripFee: 0.08,
+      firstTriggerRate: 0.0016
+    }
+  );
 });
 
 test("stop-loss count resets when the next order is unaffordable", () => {

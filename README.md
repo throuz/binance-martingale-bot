@@ -105,6 +105,8 @@ files are ignored by Git.
 
 The bot uses Binance REST and user-data WebSocket APIs. It automatically:
 
+- prints and sends a startup estimate of notional, margin, trigger distance,
+  and target profit per completed martingale cycle;
 - configures One-way Mode, maximum available leverage, and Isolated Margin;
 - reads the symbol's assets, order rules, and the account's taker fee;
 - adopts an existing One-way position after restart;
