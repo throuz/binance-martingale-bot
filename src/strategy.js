@@ -7,16 +7,31 @@ const getOppositeSide = (side) => {
   throw new Error(`Invalid order side: ${side}`);
 };
 
+const formatToStep = (value, step, rounding) => {
+  const numericStep = Number(step);
+  const precision = (step.toString().split(".")[1] ?? "")
+    .replace(/0+$/, "").length;
+  return (rounding(Number(value) / numericStep) * numericStep).toFixed(precision);
+};
+
+const normalizeQuantity = (quantity, stepSize = "0.001") =>
+  formatToStep(quantity, stepSize, Math.floor);
+
+const normalizePrice = (price, tickSize = "0.1") =>
+  formatToStep(price, tickSize, Math.round);
+
 const getTPSLPrices = (side, stopLossTimes, markPrice, config) => {
   const { LEVERAGE, FEE_RATE, TP_SL_RATE } = config;
   const orderCostRate = LEVERAGE * FEE_RATE * 2;
   const tpslRate = TP_SL_RATE + orderCostRate * (stopLossTimes + 1);
-  const higherClosingPrice = (
-    Math.round(markPrice * (1 + tpslRate / LEVERAGE) * 10) / 10
-  ).toString();
-  const lowerClosingPrice = (
-    Math.round(markPrice * (1 - tpslRate / LEVERAGE) * 10) / 10
-  ).toString();
+  const higherClosingPrice = normalizePrice(
+    markPrice * (1 + tpslRate / LEVERAGE),
+    config.TICK_SIZE
+  );
+  const lowerClosingPrice = normalizePrice(
+    markPrice * (1 - tpslRate / LEVERAGE),
+    config.TICK_SIZE
+  );
 
   if (side === "BUY") {
     return {
@@ -36,9 +51,14 @@ const getTPSLPrices = (side, stopLossTimes, markPrice, config) => {
 const getSideFromLongShortRatio = (longShortRatio) =>
   Number(longShortRatio) > 1 ? "BUY" : "SELL";
 
-const getAvailableQuantity = (availableBalance, markPrice, leverage) => {
+const getAvailableQuantity = (
+  availableBalance,
+  markPrice,
+  leverage,
+  stepSize = "0.001"
+) => {
   const availableFunds = availableBalance * leverage;
-  return Math.trunc((availableFunds / markPrice) * 1000) / 1000;
+  return Number(normalizeQuantity(availableFunds / markPrice, stepSize));
 };
 
 const getNextStopLossTimes = (
@@ -54,6 +74,8 @@ const getNextStopLossTimes = (
 export {
   getQuantity,
   getOppositeSide,
+  normalizeQuantity,
+  normalizePrice,
   getTPSLPrices,
   getSideFromLongShortRatio,
   getAvailableQuantity,

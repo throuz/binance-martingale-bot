@@ -22,7 +22,10 @@ for (const key of REQUIRED_ENV_VARS) {
   }
 }
 
-const network = process.env.BINANCE_NETWORK;
+const networkArgument = process.argv.find((argument) =>
+  argument.startsWith("--network=")
+);
+const network = networkArgument?.split("=")[1] ?? process.env.BINANCE_NETWORK;
 const urls = BINANCE_URLS[network];
 
 if (!urls) {
@@ -43,6 +46,7 @@ const tradeConfig = {
   QUOTE_ASSET: "USDT",
   SYMBOL: "BTCUSDT",
   LEVERAGE: 125,
+  MARGIN_TYPE: "CROSSED",
   FEE_RATE: 0.0004,
   TP_SL_RATE: 0.1,
   INITIAL_QUANTITY: 0.001

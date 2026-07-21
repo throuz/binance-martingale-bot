@@ -34,13 +34,43 @@ test("signed exchange requests include authentication and a signature", async (t
 
 test("available balance selects the configured quote asset", async (t) => {
   t.mock.method(globalThis, "fetch", async (url) => {
-    assert.equal(new URL(url).pathname, "/fapi/v1/balance");
+    assert.equal(new URL(url).pathname, "/fapi/v3/balance");
     return new Response(
-      JSON.stringify([{ asset: "USDT", withdrawAvailable: "10" }]),
+      JSON.stringify([{ asset: "USDT", availableBalance: "10" }]),
       { status: 200 }
     );
   });
 
   const exchange = createExchange(env, tradeConfig);
   assert.equal(await exchange.getAvailableBalance(), "10");
+});
+
+test("symbol rules use Binance market quantity and price filters", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    new Response(
+      JSON.stringify({
+        symbols: [
+          {
+            symbol: "BTCUSDT",
+            filters: [
+              {
+                filterType: "MARKET_LOT_SIZE",
+                minQty: "0.001",
+                stepSize: "0.001"
+              },
+              { filterType: "PRICE_FILTER", tickSize: "0.10" }
+            ]
+          }
+        ]
+      }),
+      { status: 200 }
+    )
+  );
+
+  const exchange = createExchange(env, tradeConfig);
+  assert.deepEqual(await exchange.getSymbolRules(), {
+    minQuantity: "0.001",
+    stepSize: "0.001",
+    tickSize: "0.10"
+  });
 });

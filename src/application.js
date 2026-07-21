@@ -16,6 +16,7 @@ const run = () => {
     isExiting = true;
     logError(error);
     await notifier.notify("Fatal error, process exited!");
+    bot.stop();
     stream.stop();
     process.exit(1);
   };
@@ -24,6 +25,7 @@ const run = () => {
     env,
     exchange,
     onEvent: bot.handleEvent,
+    onReconnect: bot.reconcile,
     onFatal: exitWithError,
     log
   });
@@ -32,6 +34,7 @@ const run = () => {
     if (isExiting) return;
     isExiting = true;
     log(`Received ${signal}, shutting down!`);
+    bot.stop();
     stream.stop();
     process.exit(0);
   };

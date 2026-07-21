@@ -46,6 +46,94 @@ const createExchange = (env, tradeConfig) => {
 
   return {
     getMarkPrice,
+    getSymbolRules: async () => {
+      const { symbols } = await request("GET", "/fapi/v1/exchangeInfo");
+      const symbol = symbols.find(({ symbol }) => symbol === tradeConfig.SYMBOL);
+      if (!symbol) throw new Error(`Unknown symbol: ${tradeConfig.SYMBOL}`);
+      const filter = (type) =>
+        symbol.filters.find(({ filterType }) => filterType === type);
+      const quantityFilter = filter("MARKET_LOT_SIZE") ?? filter("LOT_SIZE");
+      const priceFilter = filter("PRICE_FILTER");
+      if (!quantityFilter || !priceFilter) {
+        throw new Error(`Incomplete exchange filters for ${tradeConfig.SYMBOL}`);
+      }
+      return {
+        stepSize: quantityFilter.stepSize,
+        minQuantity: quantityFilter.minQty,
+        tickSize: priceFilter.tickSize
+      };
+    },
+    getCommissionRate: () =>
+      request(
+        "GET",
+        "/fapi/v1/commissionRate",
+        { symbol: tradeConfig.SYMBOL },
+        { signed: true }
+      ),
+    getPositionMode: () =>
+      request("GET", "/fapi/v1/positionSide/dual", {}, { signed: true }),
+    setOneWayMode: () =>
+      request(
+        "POST",
+        "/fapi/v1/positionSide/dual",
+        { dualSidePosition: "false" },
+        { signed: true }
+      ),
+    setLeverage: () =>
+      request(
+        "POST",
+        "/fapi/v1/leverage",
+        { symbol: tradeConfig.SYMBOL, leverage: tradeConfig.LEVERAGE },
+        { signed: true }
+      ),
+    setMarginType: () =>
+      request(
+        "POST",
+        "/fapi/v1/marginType",
+        { symbol: tradeConfig.SYMBOL, marginType: tradeConfig.MARGIN_TYPE },
+        { signed: true }
+      ),
+    getPosition: async () => {
+      const positions = await request(
+        "GET",
+        "/fapi/v3/positionRisk",
+        { symbol: tradeConfig.SYMBOL },
+        { signed: true }
+      );
+      return (
+        positions.find(({ positionAmt }) => Number(positionAmt) !== 0) ??
+        positions.find(({ positionSide }) => positionSide === "BOTH") ??
+        null
+      );
+    },
+    getOpenOrders: () =>
+      request(
+        "GET",
+        "/fapi/v1/openOrders",
+        { symbol: tradeConfig.SYMBOL },
+        { signed: true }
+      ),
+    getOpenAlgoOrders: () =>
+      request(
+        "GET",
+        "/fapi/v1/openAlgoOrders",
+        { symbol: tradeConfig.SYMBOL },
+        { signed: true }
+      ),
+    cancelAllOrders: () =>
+      request(
+        "DELETE",
+        "/fapi/v1/allOpenOrders",
+        { symbol: tradeConfig.SYMBOL },
+        { signed: true }
+      ),
+    cancelAllAlgoOrders: () =>
+      request(
+        "DELETE",
+        "/fapi/v1/algoOpenOrders",
+        { symbol: tradeConfig.SYMBOL },
+        { signed: true }
+      ),
     getLongShortRatio: async () => {
       const [{ longShortRatio }] = await request(
         "GET",
@@ -57,7 +145,7 @@ const createExchange = (env, tradeConfig) => {
     getAvailableBalance: async () => {
       const balances = await request(
         "GET",
-        "/fapi/v1/balance",
+        "/fapi/v3/balance",
         {},
         { signed: true }
       );
@@ -69,9 +157,16 @@ const createExchange = (env, tradeConfig) => {
           `Balance response does not include ${tradeConfig.QUOTE_ASSET}`
         );
       }
-      return balanceEntry.withdrawAvailable;
+      const availableBalance =
+        balanceEntry.availableBalance ??
+        balanceEntry.maxWithdrawAmount ??
+        balanceEntry.withdrawAvailable;
+      if (availableBalance === undefined) {
+        throw new Error("Balance response does not include an available balance");
+      }
+      return availableBalance;
     },
-    placeEntryOrder: (side, quantity) =>
+    placeEntryOrder: (side, quantity, clientOrderId) =>
       request(
         "POST",
         "/fapi/v1/order",
@@ -81,7 +176,9 @@ const createExchange = (env, tradeConfig) => {
           side,
           positionSide: "BOTH",
           quantity,
-          reduceOnly: "false"
+          reduceOnly: "false",
+          newOrderRespType: "RESULT",
+          newClientOrderId: clientOrderId
         },
         { signed: true }
       ),
@@ -90,6 +187,29 @@ const createExchange = (env, tradeConfig) => {
         "POST",
         "/fapi/v1/algoOrder",
         { algoType: "CONDITIONAL", ...order },
+        { signed: true }
+      ),
+    getAlgoOrder: (clientAlgoId) =>
+      request(
+        "GET",
+        "/fapi/v1/algoOrder",
+        { symbol: tradeConfig.SYMBOL, clientAlgoId },
+        { signed: true }
+      ),
+    closePosition: (side, quantity, clientOrderId) =>
+      request(
+        "POST",
+        "/fapi/v1/order",
+        {
+          symbol: tradeConfig.SYMBOL,
+          type: "MARKET",
+          side,
+          positionSide: "BOTH",
+          quantity,
+          reduceOnly: "true",
+          newOrderRespType: "RESULT",
+          newClientOrderId: clientOrderId
+        },
         { signed: true }
       ),
     createListenKey: () =>

@@ -2,11 +2,20 @@ const LISTEN_KEY_KEEPALIVE_INTERVAL_MS = 3540000;
 const SOCKET_WATCHDOG_TIMEOUT_MS = 301000;
 const EVENTS = "ORDER_TRADE_UPDATE/ACCOUNT_UPDATE/ALGO_UPDATE";
 
-const createUserDataStream = ({ env, exchange, onEvent, onFatal, log }) => {
+const createUserDataStream = ({
+  env,
+  exchange,
+  onEvent,
+  onReconnect,
+  onFatal,
+  log,
+  WebSocketClient = WebSocket
+}) => {
   let socket;
   let watchdogTimeout;
   let keepAliveInterval;
   let isStopping = false;
+  let hasConnected = false;
   let eventQueue = Promise.resolve();
 
   const resetWatchdog = () => {
@@ -16,20 +25,33 @@ const createUserDataStream = ({ env, exchange, onEvent, onFatal, log }) => {
 
   const connect = async () => {
     const { listenKey } = await exchange.createListenKey();
-    socket = new WebSocket(
+    socket = new WebSocketClient(
       `${env.WEBSOCKET_BASEURL}/private/ws?listenKey=${listenKey}&events=${EVENTS}`
     );
 
     socket.addEventListener("open", () => {
       log("Socket open!");
       resetWatchdog();
+      if (hasConnected) onReconnect().catch(onFatal);
+      hasConnected = true;
     });
 
     socket.addEventListener("message", (event) => {
       resetWatchdog();
+      let payload;
+      try {
+        payload = JSON.parse(event.data);
+      } catch (error) {
+        onFatal(error);
+        return;
+      }
+      if (payload.e === "listenKeyExpired") {
+        socket.close();
+        return;
+      }
       // Serialize events so two fills cannot place overlapping order sets.
       eventQueue = eventQueue
-        .then(() => onEvent(JSON.parse(event.data)))
+        .then(() => onEvent(payload))
         .catch(onFatal);
     });
 

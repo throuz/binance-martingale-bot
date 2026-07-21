@@ -6,7 +6,9 @@ import {
   getTPSLPrices,
   getSideFromLongShortRatio,
   getAvailableQuantity,
-  getNextStopLossTimes
+  getNextStopLossTimes,
+  normalizeQuantity,
+  normalizePrice
 } from "../src/strategy.js";
 
 const config = { LEVERAGE: 125, FEE_RATE: 0.0004, TP_SL_RATE: 0.1 };
@@ -24,12 +26,12 @@ test("opposite side is returned and invalid sides are rejected", () => {
 
 test("BUY and SELL use mirrored take-profit and stop-loss prices", () => {
   assert.deepEqual(getTPSLPrices("BUY", 0, 100000, config), {
-    takeProfitPrice: "100160",
-    stopLossPrice: "99840"
+    takeProfitPrice: "100160.0",
+    stopLossPrice: "99840.0"
   });
   assert.deepEqual(getTPSLPrices("SELL", 0, 100000, config), {
-    takeProfitPrice: "99840",
-    stopLossPrice: "100160"
+    takeProfitPrice: "99840.0",
+    stopLossPrice: "100160.0"
   });
 });
 
@@ -40,6 +42,11 @@ test("long-short ratio selects an order side", () => {
 
 test("available quantity is rounded down to three decimals", () => {
   assert.equal(getAvailableQuantity(10, 60000, 125), 0.02);
+});
+
+test("quantity and price follow exchange step sizes", () => {
+  assert.equal(normalizeQuantity(1.239, "0.01"), "1.23");
+  assert.equal(normalizePrice(100.24, "0.5"), "100.0");
 });
 
 test("stop-loss count resets when the next order is unaffordable", () => {
