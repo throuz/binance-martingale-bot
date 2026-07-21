@@ -46,7 +46,7 @@ const env = {
 
 const tradeConfig = {
   SYMBOL: "BTCUSDT",
-  DIRECTION_MODE: "TOP_TRADER_RATIO",
+  DIRECTION_MODE: "LONG",
   MARGIN_TYPE: "ISOLATED",
   TP_SL_RATE: 0.1
 };
