@@ -10,6 +10,7 @@
   },
   "scripts": {
     "start:dev": "TZ=Asia/Taipei NODE_ENV=development node --env-file=.env.testnet app",
-    "start:prod": "TZ=Asia/Taipei NODE_ENV=production node --env-file=.env.mainnet app"
+    "start:prod": "TZ=Asia/Taipei NODE_ENV=production node --env-file=.env.mainnet app",
+    "test": "node --test"
   }
 }

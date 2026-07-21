@@ -1,17 +1,15 @@
-import env from "./src/env.js";
-import tradeConfig from "./src/trade-config.js";
-import { binanceRequest } from "./src/api-clients.js";
-import { sendTelegramNotify, log, handleAPIError } from "./src/common.js";
+import { env, tradeConfig } from "./src/config.js";
+import { createExchange, sendTelegramMessage } from "./src/exchange.js";
 import {
   getQuantity,
   getOppositeSide,
   getTPSLPrices,
-  getSide,
-  getAvailableQuantity
-} from "./src/helpers.js";
+  getNextStopLossTimes
+} from "./src/strategy.js";
 
 const { WEBSOCKET_BASEURL } = env;
 const { QUOTE_ASSET, SYMBOL } = tradeConfig;
+const exchange = createExchange(env, tradeConfig);
 
 const LISTEN_KEY_KEEPALIVE_INTERVAL_MS = 3540000; // 59 minutes
 // Native WebSocket auto-replies to ping frames at the transport layer and
@@ -31,20 +29,34 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let stopLossTimes = 0;
 
-const placeEntryOrder = (side, quantity) =>
-  binanceRequest(
-    "POST",
-    "/fapi/v1/order",
-    {
-      symbol: SYMBOL,
-      type: "MARKET",
-      side,
-      positionSide: "BOTH",
-      quantity,
-      reduceOnly: "false"
-    },
-    { signed: true }
-  );
+const errorHandler = (error) => {
+  if (error.name === "HttpError") {
+    console.error(`${error.method} ${error.path} -> ${error.status}`);
+    console.error(error.body);
+  } else if (error.name === "TimeoutError" || error.name === "AbortError") {
+    console.error(`Request timed out: ${error.message}`);
+  } else {
+    console.error(error);
+  }
+};
+
+const sendTelegramNotify = async (msg) => {
+  try {
+    await sendTelegramMessage(env, msg);
+  } catch (error) {
+    errorHandler(error);
+  }
+};
+
+const log = (msg) => {
+  console.log(`${msg} [${new Date().toLocaleString()}]`);
+};
+
+const handleAPIError = async (error) => {
+  errorHandler(error);
+  await sendTelegramNotify("API error, process exited!");
+  process.exit(1);
+};
 
 // Conditional orders (STOP_MARKET/TAKE_PROFIT_MARKET) must go through the Algo
 // Order API since Binance migrated them off /fapi/v1/order on 2025-12-09
@@ -53,12 +65,7 @@ const placeEntryOrder = (side, quantity) =>
 // transient failure on one doesn't cause the other to be resubmitted.
 const placeAlgoOrderWithRetry = async (order, retryCount = 0) => {
   try {
-    await binanceRequest(
-      "POST",
-      "/fapi/v1/algoOrder",
-      { algoType: "CONDITIONAL", ...order },
-      { signed: true }
-    );
+    await exchange.placeAlgoOrder(order);
   } catch (error) {
     if (retryCount >= MAX_PROTECTIVE_ORDER_RETRIES) {
       log(`Failed to place ${order.type} order, position may be unprotected!`);
@@ -100,15 +107,21 @@ const placeProtectiveOrders = async (
 
 const newOrders = async () => {
   try {
-    const side = await getSide();
+    const side = await exchange.getSide();
     const oppositeSide = getOppositeSide(side);
-    const quantity = getQuantity(stopLossTimes).toString();
-    const { takeProfitPrice, stopLossPrice } = await getTPSLPrices(
+    const quantity = getQuantity(
+      stopLossTimes,
+      tradeConfig.INITIAL_QUANTITY
+    ).toString();
+    const markPrice = await exchange.getMarkPrice();
+    const { takeProfitPrice, stopLossPrice } = getTPSLPrices(
       side,
-      stopLossTimes
+      stopLossTimes,
+      markPrice,
+      tradeConfig
     );
 
-    await placeEntryOrder(side, quantity);
+    await exchange.placeEntryOrder(side, quantity);
     await placeProtectiveOrders(oppositeSide, takeProfitPrice, stopLossPrice);
 
     log(`New orders! ${side} ${quantity}`);
@@ -120,7 +133,7 @@ const newOrders = async () => {
 
 const extendListenKeyValidity = async () => {
   try {
-    await binanceRequest("PUT", "/fapi/v1/listenKey", {}, { signed: false });
+    await exchange.keepAliveListenKey();
   } catch (error) {
     await handleAPIError(error);
   }
@@ -207,12 +220,12 @@ const connectWebSocket = (listenKey) => {
     ) {
       log("Stop loss!");
       await sendTelegramNotify("Stop loss!");
-      stopLossTimes += 1;
-      const quantity = getQuantity(stopLossTimes);
-      const availableQuantity = await getAvailableQuantity();
-      if (quantity > availableQuantity) {
-        stopLossTimes = 0;
-      }
+      const availableQuantity = await exchange.getAvailableQuantity();
+      stopLossTimes = getNextStopLossTimes(
+        stopLossTimes,
+        availableQuantity,
+        tradeConfig.INITIAL_QUANTITY
+      );
       await newOrders();
     }
   });
@@ -233,12 +246,7 @@ const connectWebSocket = (listenKey) => {
 
 const startUserDataStream = async () => {
   try {
-    const { listenKey } = await binanceRequest(
-      "POST",
-      "/fapi/v1/listenKey",
-      {},
-      { signed: false }
-    );
+    const { listenKey } = await exchange.createListenKey();
     setInterval(extendListenKeyValidity, LISTEN_KEY_KEEPALIVE_INTERVAL_MS);
     connectWebSocket(listenKey);
     await newOrders();
