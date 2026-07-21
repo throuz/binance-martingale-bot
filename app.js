@@ -1,12 +1,10 @@
-import querystring from "node:querystring";
 import WebSocket from "ws";
 import env from "./src/env.js";
 import tradeConfig from "./src/trade-config.js";
-import { binanceFuturesAPI } from "./src/axios-instances.js";
-import { sendLineNotify, log, handleAPIError } from "./src/common.js";
+import { binanceRequest } from "./src/api-clients.js";
+import { sendTelegramNotify, log, handleAPIError } from "./src/common.js";
 import {
   getQuantity,
-  getSignature,
   getOppositeSide,
   getTPSLPrices,
   getSide,
@@ -18,42 +16,81 @@ const { QUOTE_ASSET, SYMBOL } = tradeConfig;
 
 const LISTEN_KEY_KEEPALIVE_INTERVAL_MS = 3540000; // 59 minutes
 const SOCKET_WATCHDOG_TIMEOUT_MS = 301000; // ~5 minutes without a ping
-const TIME_IN_FORCE_ERROR_CODE = -4129;
-const MAX_TIME_IN_FORCE_RETRIES = 5;
-const TIME_IN_FORCE_RETRY_DELAY_MS = 500;
+const MAX_PROTECTIVE_ORDER_RETRIES = 5;
+const PROTECTIVE_ORDER_RETRY_DELAY_MS = 500;
+// STOP_MARKET/TAKE_PROFIT_MARKET fills still arrive as ORDER_TRADE_UPDATE once
+// triggered; ALGO_UPDATE only covers the pending-conditional-order lifecycle.
+const USER_DATA_STREAM_EVENTS = "ORDER_TRADE_UPDATE/ACCOUNT_UPDATE/ALGO_UPDATE";
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let stopLossTimes = 0;
 
-const handleTimeInForceError = async (orders, retryCount = 0) => {
-  try {
-    const totalParams = {
-      batchOrders: JSON.stringify(orders),
-      timestamp: Date.now()
-    };
-    const queryString = querystring.stringify(totalParams);
-    const signature = getSignature(queryString);
+const placeEntryOrder = (side, quantity) =>
+  binanceRequest(
+    "POST",
+    "/fapi/v1/order",
+    {
+      symbol: SYMBOL,
+      type: "MARKET",
+      side,
+      positionSide: "BOTH",
+      quantity,
+      reduceOnly: "false"
+    },
+    { signed: true }
+  );
 
-    const response = await binanceFuturesAPI.post(
-      `/fapi/v1/batchOrders?${queryString}&signature=${signature}`
+// Conditional orders (STOP_MARKET/TAKE_PROFIT_MARKET) must go through the Algo
+// Order API since Binance migrated them off /fapi/v1/order on 2025-12-09
+// (error -4120 otherwise). There is no batch endpoint for algo orders, so TP
+// and SL are placed one at a time, each with their own bounded retry so a
+// transient failure on one doesn't cause the other to be resubmitted.
+const placeAlgoOrderWithRetry = async (order, retryCount = 0) => {
+  try {
+    await binanceRequest(
+      "POST",
+      "/fapi/v1/algoOrder",
+      { algoType: "CONDITIONAL", ...order },
+      { signed: true }
     );
-    if (
-      response.data.some((element) => element.code === TIME_IN_FORCE_ERROR_CODE)
-    ) {
-      if (retryCount >= MAX_TIME_IN_FORCE_RETRIES) {
-        log("Failed to place TP/SL orders, position may be unprotected!");
-        await sendLineNotify(
-          "Failed to place TP/SL orders after retries, position may be unprotected!"
-        );
-        process.exit(1);
-      }
-      await wait(TIME_IN_FORCE_RETRY_DELAY_MS);
-      await handleTimeInForceError(orders, retryCount + 1);
-    }
   } catch (error) {
-    await handleAPIError(error);
+    if (retryCount >= MAX_PROTECTIVE_ORDER_RETRIES) {
+      log(`Failed to place ${order.type} order, position may be unprotected!`);
+      await sendTelegramNotify(
+        `Failed to place ${order.type} order after retries, position may be unprotected!`
+      );
+      process.exit(1);
+      return;
+    }
+    await wait(PROTECTIVE_ORDER_RETRY_DELAY_MS);
+    await placeAlgoOrderWithRetry(order, retryCount + 1);
   }
+};
+
+const placeProtectiveOrders = async (
+  oppositeSide,
+  takeProfitPrice,
+  stopLossPrice
+) => {
+  const commonFields = {
+    symbol: SYMBOL,
+    positionSide: "BOTH",
+    side: oppositeSide,
+    workingType: "MARK_PRICE",
+    closePosition: "true",
+    timeInForce: "GTC"
+  };
+  await placeAlgoOrderWithRetry({
+    ...commonFields,
+    type: "TAKE_PROFIT_MARKET",
+    triggerPrice: takeProfitPrice
+  });
+  await placeAlgoOrderWithRetry({
+    ...commonFields,
+    type: "STOP_MARKET",
+    triggerPrice: stopLossPrice
+  });
 };
 
 const newOrders = async () => {
@@ -65,53 +102,12 @@ const newOrders = async () => {
       side,
       stopLossTimes
     );
-    const commonOrderFields = { symbol: SYMBOL, positionSide: "BOTH" };
-    const marketOrder = {
-      ...commonOrderFields,
-      type: "MARKET",
-      side,
-      quantity,
-      reduceOnly: "false"
-    };
-    const takeProfitOrder = {
-      ...commonOrderFields,
-      side: oppositeSide,
-      type: "TAKE_PROFIT_MARKET",
-      timeInForce: "GTE_GTC",
-      stopPrice: takeProfitPrice,
-      workingType: "MARK_PRICE",
-      closePosition: "true"
-    };
-    const stopLossOrder = {
-      ...commonOrderFields,
-      side: oppositeSide,
-      type: "STOP_MARKET",
-      timeInForce: "GTE_GTC",
-      stopPrice: stopLossPrice,
-      workingType: "MARK_PRICE",
-      closePosition: "true"
-    };
-    const totalParams = {
-      batchOrders: JSON.stringify([
-        marketOrder,
-        takeProfitOrder,
-        stopLossOrder
-      ]),
-      timestamp: Date.now()
-    };
-    const queryString = querystring.stringify(totalParams);
-    const signature = getSignature(queryString);
 
-    const response = await binanceFuturesAPI.post(
-      `/fapi/v1/batchOrders?${queryString}&signature=${signature}`
-    );
-    if (
-      response.data.some((element) => element.code === TIME_IN_FORCE_ERROR_CODE)
-    ) {
-      await handleTimeInForceError([takeProfitOrder, stopLossOrder]);
-    }
+    await placeEntryOrder(side, quantity);
+    await placeProtectiveOrders(oppositeSide, takeProfitPrice, stopLossPrice);
+
     log(`New orders! ${side} ${quantity}`);
-    await sendLineNotify(`New orders! ${side} ${quantity}`);
+    await sendTelegramNotify(`New orders! ${side} ${quantity}`);
   } catch (error) {
     await handleAPIError(error);
   }
@@ -119,7 +115,7 @@ const newOrders = async () => {
 
 const extendListenKeyValidity = async () => {
   try {
-    await binanceFuturesAPI.put("/fapi/v1/listenKey");
+    await binanceRequest("PUT", "/fapi/v1/listenKey", {}, { signed: false });
   } catch (error) {
     await handleAPIError(error);
   }
@@ -140,7 +136,12 @@ const setCloseConnect = (ws) => {
 let currentWebSocket;
 
 const connectWebSocket = (listenKey) => {
-  const ws = new WebSocket(`${WEBSOCKET_BASEURL}/ws/${listenKey}`);
+  // Legacy `${WEBSOCKET_BASEURL}/ws/<listenKey>` URLs were decommissioned
+  // 2026-04-23; user data streams now live under /private/ws with an
+  // explicit `events` list.
+  const ws = new WebSocket(
+    `${WEBSOCKET_BASEURL}/private/ws?listenKey=${listenKey}&events=${USER_DATA_STREAM_EVENTS}`
+  );
   currentWebSocket = ws;
 
   ws.on("open", () => {
@@ -160,8 +161,23 @@ const connectWebSocket = (listenKey) => {
       const balanceEntry = eventObj.a.B.find(({ a }) => a === QUOTE_ASSET);
       if (balanceEntry) {
         log(`Wallet balance: ${balanceEntry.wb} ${QUOTE_ASSET}`);
-        await sendLineNotify(
+        await sendTelegramNotify(
           `Wallet balance: ${balanceEntry.wb} ${QUOTE_ASSET}`
+        );
+      }
+    }
+
+    // Informational only: the pending-conditional-order lifecycle. Actual
+    // fills are still detected below via ORDER_TRADE_UPDATE, since the exact
+    // ALGO_UPDATE field names aren't fully documented publicly yet.
+    if (eventObj.e === "ALGO_UPDATE") {
+      const algoOrder = eventObj.o ?? {};
+      const status = algoOrder.algoStatus ?? algoOrder.status;
+      const orderType = algoOrder.orderType ?? algoOrder.type;
+      log(`Algo order update: ${orderType ?? "?"} ${status ?? "?"}`);
+      if (status === "CANCELED") {
+        await sendTelegramNotify(
+          `Algo order (${orderType ?? "unknown"}) was canceled, please check your position!`
         );
       }
     }
@@ -173,7 +189,7 @@ const connectWebSocket = (listenKey) => {
       eventObj.o.X === "FILLED"
     ) {
       log("Take profit!");
-      await sendLineNotify("Take profit!");
+      await sendTelegramNotify("Take profit!");
       if (stopLossTimes !== 0) {
         stopLossTimes = 0;
       }
@@ -187,7 +203,7 @@ const connectWebSocket = (listenKey) => {
       eventObj.o.X === "FILLED"
     ) {
       log("Stop loss!");
-      await sendLineNotify("Stop loss!");
+      await sendTelegramNotify("Stop loss!");
       stopLossTimes += 1;
       const quantity = getQuantity(stopLossTimes);
       const availableQuantity = await getAvailableQuantity();
@@ -212,9 +228,14 @@ const connectWebSocket = (listenKey) => {
 
 const startUserDataStream = async () => {
   try {
-    const response = await binanceFuturesAPI.post("/fapi/v1/listenKey");
+    const { listenKey } = await binanceRequest(
+      "POST",
+      "/fapi/v1/listenKey",
+      {},
+      { signed: false }
+    );
     setInterval(extendListenKeyValidity, LISTEN_KEY_KEEPALIVE_INTERVAL_MS);
-    connectWebSocket(response.data.listenKey);
+    connectWebSocket(listenKey);
     await newOrders();
   } catch (error) {
     await handleAPIError(error);
@@ -223,7 +244,7 @@ const startUserDataStream = async () => {
 
 const handleFatalError = async (error) => {
   console.error("Fatal unexpected error:", error);
-  await sendLineNotify("Fatal unexpected error, process exited!");
+  await sendTelegramNotify("Fatal unexpected error, process exited!");
   process.exit(1);
 };
 

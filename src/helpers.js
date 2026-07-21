@@ -1,11 +1,6 @@
-import crypto from "node:crypto";
-import querystring from "node:querystring";
-import env from "./env.js";
 import tradeConfig from "./trade-config.js";
-import { binanceFuturesAPI } from "./axios-instances.js";
-import { handleAPIError } from "./common.js";
+import { binanceRequest } from "./api-clients.js";
 
-const { SECRET_KEY } = env;
 const {
   QUOTE_ASSET,
   SYMBOL,
@@ -17,39 +12,22 @@ const {
 
 const getQuantity = (stopLossTimes) => INITIAL_QUANTITY * 2 ** stopLossTimes;
 
-const getSignature = (queryString) =>
-  crypto.createHmac("sha256", SECRET_KEY).update(queryString).digest("hex");
-
 const getAvailableBalance = async () => {
-  try {
-    const totalParams = { timestamp: Date.now() };
-    const queryString = querystring.stringify(totalParams);
-    const signature = getSignature(queryString);
-
-    const response = await binanceFuturesAPI.get(
-      `/fapi/v1/balance?${queryString}&signature=${signature}`
-    );
-    const availableBalance = response.data.find(
-      ({ asset }) => asset === QUOTE_ASSET
-    ).withdrawAvailable;
-    return availableBalance;
-  } catch (error) {
-    await handleAPIError(error);
-  }
+  const balances = await binanceRequest(
+    "GET",
+    "/fapi/v1/balance",
+    {},
+    { signed: true }
+  );
+  const balanceEntry = balances.find(({ asset }) => asset === QUOTE_ASSET);
+  return balanceEntry.withdrawAvailable;
 };
 
 const getMarkPrice = async () => {
-  try {
-    const totalParams = { symbol: SYMBOL };
-    const queryString = querystring.stringify(totalParams);
-
-    const response = await binanceFuturesAPI.get(
-      `/fapi/v1/premiumIndex?${queryString}`
-    );
-    return response.data.markPrice;
-  } catch (error) {
-    await handleAPIError(error);
-  }
+  const { markPrice } = await binanceRequest("GET", "/fapi/v1/premiumIndex", {
+    symbol: SYMBOL
+  });
+  return markPrice;
 };
 
 const getOppositeSide = (side) => {
@@ -84,17 +62,12 @@ const getTPSLPrices = async (side, stopLossTimes) => {
 };
 
 const getSide = async () => {
-  try {
-    const totalParams = { symbol: SYMBOL, period: "5m", limit: "1" };
-    const queryString = querystring.stringify(totalParams);
-
-    const response = await binanceFuturesAPI.get(
-      `/futures/data/topLongShortPositionRatio?${queryString}`
-    );
-    return response.data[0].longShortRatio > 1 ? "BUY" : "SELL";
-  } catch (error) {
-    await handleAPIError(error);
-  }
+  const [{ longShortRatio }] = await binanceRequest(
+    "GET",
+    "/futures/data/topLongShortPositionRatio",
+    { symbol: SYMBOL, period: "5m", limit: "1" }
+  );
+  return longShortRatio > 1 ? "BUY" : "SELL";
 };
 
 const getAvailableQuantity = async () => {
@@ -106,7 +79,6 @@ const getAvailableQuantity = async () => {
 
 export {
   getQuantity,
-  getSignature,
   getAvailableBalance,
   getMarkPrice,
   getOppositeSide,
