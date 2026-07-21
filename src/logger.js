@@ -1,5 +1,8 @@
 const log = (message) => {
-  console.log(`${message} [${new Date().toLocaleString()}]`);
+  const timestamp = new Date().toLocaleString("zh-TW", {
+    timeZone: "Asia/Taipei"
+  });
+  console.log(`${message} [${timestamp}]`);
 };
 
 const logError = (error) => {

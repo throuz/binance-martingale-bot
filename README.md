@@ -53,8 +53,8 @@ src/config.js             # Network, credentials, and trading configuration
 The npm scripts load the right file automatically via Node's built-in `--env-file` flag — no extra config-loading code needed:
 
 ```
-"start:testnet": "TZ=Asia/Taipei BINANCE_NETWORK=testnet node --env-file=.env.testnet app",
-"start:mainnet": "TZ=Asia/Taipei BINANCE_NETWORK=mainnet node --env-file=.env.mainnet app"
+"start:testnet": "BINANCE_NETWORK=testnet node --env-file=.env.testnet app.js",
+"start:mainnet": "BINANCE_NETWORK=mainnet node --env-file=.env.mainnet app.js"
 ```
 
 ## Strategy

@@ -9,8 +9,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "start:testnet": "TZ=Asia/Taipei BINANCE_NETWORK=testnet node --env-file=.env.testnet app",
-    "start:mainnet": "TZ=Asia/Taipei BINANCE_NETWORK=mainnet node --env-file=.env.mainnet app",
+    "start:testnet": "BINANCE_NETWORK=testnet node --env-file=.env.testnet app.js",
+    "start:mainnet": "BINANCE_NETWORK=mainnet node --env-file=.env.mainnet app.js",
     "test": "node --test"
   }
 }
