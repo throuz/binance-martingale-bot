@@ -11,7 +11,12 @@ const tradeConfig = {
 
 const createDependencies = () => {
   const calls = [];
-  const state = { position: null, algoOrders: [], orders: [] };
+  const state = {
+    position: null,
+    algoOrders: [],
+    algoHistory: new Map(),
+    orders: []
+  };
   const exchange = {
     getSymbolRules: async () => ({
       quoteAsset: "USDT",
@@ -53,10 +58,13 @@ const createDependencies = () => {
       };
     },
     placeAlgoOrder: async (order) => {
-      state.algoOrders.push(order);
-      calls.push(["algo", order]);
+      const placed = { ...order, orderType: order.type, algoId: calls.length + 1 };
+      state.algoOrders.push(placed);
+      calls.push(["algo", placed]);
+      return placed;
     },
-    getAlgoOrder: async () => null,
+    getAlgoOrder: async (clientAlgoId) =>
+      state.algoHistory.get(clientAlgoId) ?? null,
     closePosition: async () => {
       state.position = null;
       calls.push(["close"]);
@@ -155,15 +163,84 @@ test("a stop loss advances the martingale quantity", async (t) => {
   const bot = createBot({ exchange, notifier, log: () => {}, tradeConfig });
   t.after(bot.stop);
   await bot.start();
+  const stopLoss = state.algoOrders.find(
+    ({ orderType }) => orderType === "STOP_MARKET"
+  );
   calls.length = 0;
   state.position = null;
 
   await bot.handleEvent({
     e: "ORDER_TRADE_UPDATE",
-    o: { ot: "STOP_MARKET", x: "TRADE", X: "FILLED" }
+    o: {
+      ot: "STOP_MARKET",
+      x: "TRADE",
+      X: "FILLED",
+      c: stopLoss.clientAlgoId
+    }
   });
 
   assert.ok(calls.some((call) => call[0] === "entry" && call[2] === "0.002"));
+});
+
+test("a finished algo stop loss advances the martingale quantity", async (t) => {
+  const { calls, state, exchange, notifier } = createDependencies();
+  const bot = createBot({ exchange, notifier, log: () => {}, tradeConfig });
+  t.after(bot.stop);
+  await bot.start();
+  const stopLoss = state.algoOrders.find(
+    ({ orderType }) => orderType === "STOP_MARKET"
+  );
+  calls.length = 0;
+  state.position = null;
+
+  await bot.handleEvent({
+    e: "ALGO_UPDATE",
+    o: { ...stopLoss, algoStatus: "FINISHED", actualOrderId: "123" }
+  });
+
+  assert.ok(calls.some((call) => call[0] === "entry" && call[2] === "0.002"));
+});
+
+test("reconciliation recovers a missed stop-loss event from REST", async (t) => {
+  const { calls, state, exchange, notifier } = createDependencies();
+  const bot = createBot({ exchange, notifier, log: () => {}, tradeConfig });
+  t.after(bot.stop);
+  await bot.start();
+  for (const order of state.algoOrders) {
+    const isStopLoss = order.orderType === "STOP_MARKET";
+    state.algoHistory.set(order.clientAlgoId, {
+      ...order,
+      algoStatus: isStopLoss ? "FINISHED" : "EXPIRED",
+      actualOrderId: isStopLoss ? "123" : ""
+    });
+  }
+  calls.length = 0;
+  state.position = null;
+  state.algoOrders = [];
+
+  await bot.reconcile();
+
+  assert.ok(calls.some((call) => call[0] === "entry" && call[2] === "0.002"));
+});
+
+test("reconciliation does not reopen when the close reason is unknown", async (t) => {
+  const { calls, state, exchange, notifier } = createDependencies();
+  const bot = createBot({ exchange, notifier, log: () => {}, tradeConfig });
+  t.after(bot.stop);
+  await bot.start();
+  for (const order of state.algoOrders) {
+    state.algoHistory.set(order.clientAlgoId, {
+      ...order,
+      algoStatus: "EXPIRED",
+      actualOrderId: ""
+    });
+  }
+  calls.length = 0;
+  state.position = null;
+  state.algoOrders = [];
+
+  await assert.rejects(bot.reconcile(), /which protective order closed/);
+  assert.equal(calls.some(([type]) => type === "entry"), false);
 });
 
 test("an unaffordable martingale step resets to the initial quantity", async (t) => {
@@ -171,13 +248,21 @@ test("an unaffordable martingale step resets to the initial quantity", async (t)
   const bot = createBot({ exchange, notifier, log: () => {}, tradeConfig });
   t.after(bot.stop);
   await bot.start();
+  const stopLoss = state.algoOrders.find(
+    ({ orderType }) => orderType === "STOP_MARKET"
+  );
   calls.length = 0;
   state.position = null;
   exchange.getAvailableBalance = async () => "1";
 
   await bot.handleEvent({
     e: "ORDER_TRADE_UPDATE",
-    o: { ot: "STOP_MARKET", x: "TRADE", X: "FILLED" }
+    o: {
+      ot: "STOP_MARKET",
+      x: "TRADE",
+      X: "FILLED",
+      c: stopLoss.clientAlgoId
+    }
   });
 
   assert.ok(calls.some((call) => call[0] === "entry" && call[2] === "0.001"));

@@ -32,6 +32,16 @@ const createTrader = ({
 }) => {
   let runtimeConfig = tradeConfig;
   let symbolRules;
+  let managedProtection = new Map();
+
+  const rememberProtection = (order, fallbackOrder) => {
+    const type = order?.orderType ?? order?.type ?? fallbackOrder.type;
+    managedProtection.set(type, {
+      type,
+      algoId: order?.algoId,
+      clientAlgoId: order?.clientAlgoId ?? fallbackOrder.clientAlgoId
+    });
+  };
 
   const loadMarketMetadata = async () => {
     if (symbolRules) return;
@@ -138,6 +148,8 @@ const createTrader = ({
       await exchange.cancelAllAlgoOrders();
       openAlgoOrders = [];
     }
+    managedProtection = new Map();
+    for (const order of openAlgoOrders) rememberProtection(order, order);
     const existingTypes = new Set(
       openAlgoOrders.map((order) => order.orderType ?? order.type)
     );
@@ -151,22 +163,79 @@ const createTrader = ({
     };
 
     if (!existingTypes.has("TAKE_PROFIT_MARKET")) {
-      await placeAlgoOrderSafely({
+      const order = {
         ...commonFields,
         type: "TAKE_PROFIT_MARKET",
         triggerPrice: takeProfitPrice,
         clientAlgoId: createClientId("tp")
-      });
+      };
+      const placed = await placeAlgoOrderSafely(order);
+      rememberProtection(placed, order);
     }
     if (!existingTypes.has("STOP_MARKET")) {
-      await placeAlgoOrderSafely({
+      const order = {
         ...commonFields,
         type: "STOP_MARKET",
         triggerPrice: stopLossPrice,
         clientAlgoId: createClientId("sl")
-      });
+      };
+      const placed = await placeAlgoOrderSafely(order);
+      rememberProtection(placed, order);
     }
     return stopLossTimes;
+  };
+
+  const hasManagedProtection = () => managedProtection.size === 2;
+
+  const isManagedProtection = (order) =>
+    [...managedProtection.values()].some(
+      ({ algoId, clientAlgoId }) =>
+        (algoId !== undefined && String(order.algoId) === String(algoId)) ||
+        (clientAlgoId && order.clientAlgoId === clientAlgoId)
+    );
+
+  const resolveClosedPosition = async (currentStopLossTimes) => {
+    if (!hasManagedProtection()) {
+      throw new Error("Cannot determine why the managed position closed");
+    }
+    const results = await Promise.all(
+      [...managedProtection.values()].map(({ clientAlgoId }) =>
+        exchange.getAlgoOrder(clientAlgoId)
+      )
+    );
+    const finished = results.filter(
+      (order) =>
+        order?.algoStatus === "FINISHED" &&
+        String(order.actualOrderId ?? "") !== ""
+    );
+    if (finished.length !== 1) {
+      throw new Error("Cannot determine which protective order closed the position");
+    }
+    const type = finished[0].orderType ?? finished[0].type;
+    if (!["TAKE_PROFIT_MARKET", "STOP_MARKET"].includes(type)) {
+      throw new Error(`Unexpected finished protective order type: ${type}`);
+    }
+    await exchange.cancelAllAlgoOrders();
+    managedProtection = new Map();
+    const isStopLoss = type === "STOP_MARKET";
+    const message = `Recovered missed ${isStopLoss ? "stop loss" : "take profit"} via REST.`;
+    log(message);
+    await notifier.notify(message);
+    if (type === "TAKE_PROFIT_MARKET") return 0;
+    const [availableBalance, markPrice] = await Promise.all([
+      exchange.getAvailableBalance(runtimeConfig.QUOTE_ASSET),
+      exchange.getMarkPrice()
+    ]);
+    return getNextStopLossTimes(
+      currentStopLossTimes,
+      getAvailableQuantity(
+        availableBalance,
+        markPrice,
+        runtimeConfig.LEVERAGE,
+        symbolRules.stepSize
+      ),
+      runtimeConfig.INITIAL_QUANTITY
+    );
   };
 
   const emergencyClose = async (cause) => {
@@ -240,6 +309,7 @@ const createTrader = ({
   const settleFilledPosition = async (isStopLoss, currentStopLossTimes) => {
     await exchange.cancelAllAlgoOrders();
     await syncPosition(false);
+    managedProtection = new Map();
     if (!isStopLoss) return 0;
     const [availableBalance, markPrice] = await Promise.all([
       exchange.getAvailableBalance(runtimeConfig.QUOTE_ASSET),
@@ -260,6 +330,9 @@ const createTrader = ({
   return {
     loadMarketMetadata,
     getRuntimeConfig,
+    hasManagedProtection,
+    isManagedProtection,
+    resolveClosedPosition,
     inferStopLossTimes,
     ensureProtection,
     openPosition,

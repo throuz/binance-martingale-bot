@@ -55,6 +55,12 @@ const createBot = ({
     await reconcile();
   };
 
+  const announceFilledOrder = async (isStopLoss) => {
+    const message = isStopLoss ? "Stop loss!" : "Take profit!";
+    log(message);
+    await notifier.notify(message);
+  };
+
   const handleEvent = (event) =>
     serialize(async () => {
       if (event.e === "ACCOUNT_UPDATE") {
@@ -67,6 +73,20 @@ const createBot = ({
       if (event.e === "ALGO_UPDATE") {
         const order = event.o ?? {};
         const status = order.algoStatus ?? order.status;
+        if (status === "FINISHED" && trader.isManagedProtection(order)) {
+          const type = order.orderType ?? order.type;
+          const isStopLoss = type === "STOP_MARKET";
+          if (isStopLoss || type === "TAKE_PROFIT_MARKET") {
+            await announceFilledOrder(isStopLoss);
+            await handleFilledOrder(isStopLoss);
+          }
+          return;
+        }
+        if (status === "EXPIRED" && trader.isManagedProtection(order)) {
+          // The unused sibling normally expires when TP or SL finishes. The
+          // FINISHED event or periodic REST reconciliation settles the round.
+          return;
+        }
         if (["CANCELED", "REJECTED", "EXPIRED"].includes(status)) {
           await notifier.notify(`Protective order ${status}; reconciling now.`);
           await reconcile();
@@ -77,12 +97,17 @@ const createBot = ({
       if (event.e !== "ORDER_TRADE_UPDATE") return;
       const filled = event.o.x === "TRADE" && event.o.X === "FILLED";
       if (!filled) return;
+      const belongsToCurrentProtection = trader.isManagedProtection({
+        algoId: event.o.algoId,
+        clientAlgoId: event.o.c
+      });
+      if (!belongsToCurrentProtection) return;
       if (event.o.ot === "TAKE_PROFIT_MARKET") {
-        await notifier.notify("Take profit!");
+        await announceFilledOrder(false);
         await handleFilledOrder(false);
       }
       if (event.o.ot === "STOP_MARKET") {
-        await notifier.notify("Stop loss!");
+        await announceFilledOrder(true);
         await handleFilledOrder(true);
       }
     });

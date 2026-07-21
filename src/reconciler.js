@@ -54,6 +54,9 @@ const createReconciler = ({ exchange, trader }) => {
       return { stopLossTimes: inferredStopLossTimes, adopted: true };
     }
 
+    if (trader.hasManagedProtection()) {
+      stopLossTimes = await trader.resolveClosedPosition(stopLossTimes);
+    }
     await cleanFlatAccount();
     await configureAccount(position);
     const openedStopLossTimes = await trader.openPosition(stopLossTimes);

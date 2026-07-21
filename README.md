@@ -109,6 +109,7 @@ The bot uses Binance REST and user-data WebSocket APIs. It automatically:
 - reads the symbol's assets, order rules, and the account's taker fee;
 - adopts an existing One-way position after restart;
 - restores missing take-profit or stop-loss protection;
+- verifies closed Algo orders through REST when a WebSocket event is missed;
 - removes stale orders before opening a new position;
 - reconciles every minute and after WebSocket reconnection; and
 - attempts an emergency close if protection cannot be established.
