@@ -59,6 +59,10 @@ TP_SL_RATE: 0.1 // 10% intended return on margin
 - `TOP_TRADER_RATIO`: long when Binance's top-trader position ratio is above
   `1`, otherwise short.
 
+Testnet orders use Testnet prices and balances. Because Futures Testnet does not
+provide the top-trader ratio consistently, that public signal is read from
+Binance Mainnet when `TOP_TRADER_RATIO` is selected.
+
 Direction selection is isolated in `src/strategy.js`, so another signal can be
 added without changing order execution or risk recovery.
 

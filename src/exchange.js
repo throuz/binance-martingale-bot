@@ -11,7 +11,7 @@ const createExchange = (env, tradeConfig) => {
     method,
     path,
     params = {},
-    { signed = false } = {}
+    { signed = false, baseUrl = env.REST_BASEURL } = {}
   ) => {
     const searchParams = new URLSearchParams(params);
     if (signed) {
@@ -19,7 +19,7 @@ const createExchange = (env, tradeConfig) => {
       searchParams.set("signature", sign(searchParams.toString()));
     }
     const query = searchParams.toString();
-    const url = `${env.REST_BASEURL}${path}${query ? `?${query}` : ""}`;
+    const url = `${baseUrl}${path}${query ? `?${query}` : ""}`;
     const response = await fetch(url, {
       method,
       headers: { "X-MBX-APIKEY": env.API_KEY },
@@ -155,11 +155,16 @@ const createExchange = (env, tradeConfig) => {
         { signed: true }
       ),
     getLongShortRatio: async () => {
-      const [{ longShortRatio }] = await request(
+      const response = await request(
         "GET",
         "/futures/data/topLongShortPositionRatio",
-        { symbol: tradeConfig.SYMBOL, period: "5m", limit: "1" }
+        { symbol: tradeConfig.SYMBOL, period: "5m", limit: "1" },
+        { baseUrl: env.MARKET_DATA_BASEURL ?? env.REST_BASEURL }
       );
+      const longShortRatio = response?.[0]?.longShortRatio;
+      if (!Number.isFinite(Number(longShortRatio))) {
+        throw new Error("Binance did not return a valid top-trader ratio");
+      }
       return longShortRatio;
     },
     getAvailableBalance: async (quoteAsset) => {

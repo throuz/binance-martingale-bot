@@ -1,10 +1,12 @@
 const BINANCE_URLS = {
   mainnet: {
     REST_BASEURL: "https://fapi.binance.com",
+    MARKET_DATA_BASEURL: "https://fapi.binance.com",
     WEBSOCKET_BASEURL: "wss://fstream.binance.com"
   },
   testnet: {
     REST_BASEURL: "https://testnet.binancefuture.com",
+    MARKET_DATA_BASEURL: "https://fapi.binance.com",
     WEBSOCKET_BASEURL: "wss://stream.binancefuture.com"
   }
 };

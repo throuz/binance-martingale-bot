@@ -5,7 +5,8 @@ import { createExchange } from "../src/exchange.js";
 const env = {
   API_KEY: "test-api-key",
   SECRET_KEY: "test-secret-key",
-  REST_BASEURL: "https://example.test"
+  REST_BASEURL: "https://example.test",
+  MARKET_DATA_BASEURL: "https://market.example.test"
 };
 const tradeConfig = {
   SYMBOL: "BTCUSDT",
@@ -96,4 +97,30 @@ test("maximum leverage is read from the symbol leverage brackets", async (t) => 
 
   const exchange = createExchange(env, tradeConfig);
   assert.equal(await exchange.getMaximumLeverage(), 125);
+});
+
+test("top-trader ratio uses the dedicated public market-data endpoint", async (t) => {
+  t.mock.method(globalThis, "fetch", async (url) => {
+    assert.equal(new URL(url).origin, env.MARKET_DATA_BASEURL);
+    return new Response(JSON.stringify([{ longShortRatio: "1.25" }]), {
+      status: 200
+    });
+  });
+
+  const exchange = createExchange(env, tradeConfig);
+  assert.equal(await exchange.getLongShortRatio(), "1.25");
+});
+
+test("invalid top-trader ratio responses produce a clear error", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    new Response(JSON.stringify({ code: -1000, msg: "unsupported" }), {
+      status: 200
+    })
+  );
+
+  const exchange = createExchange(env, tradeConfig);
+  await assert.rejects(
+    exchange.getLongShortRatio(),
+    /did not return a valid top-trader ratio/
+  );
 });
