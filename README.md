@@ -4,7 +4,7 @@ Binance Futures BOT is an automated trading robot specialized in Binance Futures
 
 ## Basic Usage
 
-Make sure the cross wallet has a certain amount of BUSD.
+Make sure the cross wallet has a certain amount of USDT (see `QUOTE_ASSET` in `src/trade-config.js`).
 
 Install all dependencies.
 
@@ -12,24 +12,18 @@ Install all dependencies.
 npm i
 ```
 
-Create `src/env.js`, the content is as follows, replace `API_KEY` and `SECRET_KEY` with your own.
+Copy the example env files and fill in your own `API_KEY`, `SECRET_KEY` and `LINE_NOTIFY_TOKEN`. Both files are gitignored so your credentials never get committed.
 
 ```
-const envProd = {
-    API_KEY: "your_api_key",
-    SECRET_KEY: "your_secret_key",
-    REST_BASEURL: "https://fapi.binance.com",
-    WEBSOCKET_BASEURL: "wss://fstream.binance.com",
-    LINE_NOTIFY_TOKEN: "your_line_notify_token"
-};
+cp src/env-dev.example.js src/env-dev.js
+cp src/env-prod.example.js src/env-prod.js
+```
 
-const envDev = {
-    API_KEY: "your_api_key",
-    SECRET_KEY: "your_secret_key",
-    REST_BASEURL: "https://testnet.binancefuture.com",
-    WEBSOCKET_BASEURL: "wss://stream.binancefuture.com",
-    LINE_NOTIFY_TOKEN: "your_line_notify_token"
-};
+`src/env.js` picks one of the two files based on `NODE_ENV` (see the `start:dev` / `start:prod` npm scripts):
+
+```
+import envDev from "./env-dev.js";
+import envProd from "./env-prod.js";
 
 const env = process.env.NODE_ENV === "production" ? envProd : envDev;
 
@@ -38,7 +32,7 @@ export default env;
 
 ## Strategy
 
-This automatic trading strategy is improved based on the martingale strategy, take profit and stop loss of each order is 20%. If the stop loss, it will be automatically placed twice the quantity of the previous order, if the quantity exceeds the total funds, the initial quantity will be placed.
+This automatic trading strategy is improved based on the martingale strategy. Take profit / stop loss distance for each order is controlled by `TP_SL_RATE` in `src/trade-config.js` (plus a small buffer to cover leverage and trading fees). If the stop loss triggers, the next order is automatically placed at twice the quantity of the previous one; once the quantity would exceed the available funds, it resets back to the initial quantity.
 
 ## Contributing
 

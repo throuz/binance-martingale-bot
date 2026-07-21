@@ -1,7 +1,7 @@
 export default {
-  API_KEY: "Your api key",
-  SECRET_KEY: "Your secret key",
+  API_KEY: "your_api_key",
+  SECRET_KEY: "your_secret_key",
   REST_BASEURL: "https://fapi.binance.com",
   WEBSOCKET_BASEURL: "wss://fstream.binance.com",
-  LINE_NOTIFY_TOKEN: "Your line notify token"
+  LINE_NOTIFY_TOKEN: "your_line_notify_token"
 };

@@ -16,9 +16,17 @@ import {
 const { WEBSOCKET_BASEURL } = env;
 const { QUOTE_ASSET, SYMBOL } = tradeConfig;
 
+const LISTEN_KEY_KEEPALIVE_INTERVAL_MS = 3540000; // 59 minutes
+const SOCKET_WATCHDOG_TIMEOUT_MS = 301000; // ~5 minutes without a ping
+const TIME_IN_FORCE_ERROR_CODE = -4129;
+const MAX_TIME_IN_FORCE_RETRIES = 5;
+const TIME_IN_FORCE_RETRY_DELAY_MS = 500;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 let stopLossTimes = 0;
 
-const handleTimeInForceError = async (orders) => {
+const handleTimeInForceError = async (orders, retryCount = 0) => {
   try {
     const totalParams = {
       batchOrders: JSON.stringify(orders),
@@ -30,8 +38,18 @@ const handleTimeInForceError = async (orders) => {
     const response = await binanceFuturesAPI.post(
       `/fapi/v1/batchOrders?${queryString}&signature=${signature}`
     );
-    if (response.data.some((element) => element.code === -4129)) {
-      await handleTimeInForceError(orders);
+    if (
+      response.data.some((element) => element.code === TIME_IN_FORCE_ERROR_CODE)
+    ) {
+      if (retryCount >= MAX_TIME_IN_FORCE_RETRIES) {
+        log("Failed to place TP/SL orders, position may be unprotected!");
+        await sendLineNotify(
+          "Failed to place TP/SL orders after retries, position may be unprotected!"
+        );
+        process.exit(1);
+      }
+      await wait(TIME_IN_FORCE_RETRY_DELAY_MS);
+      await handleTimeInForceError(orders, retryCount + 1);
     }
   } catch (error) {
     await handleAPIError(error);
@@ -47,18 +65,17 @@ const newOrders = async () => {
       side,
       stopLossTimes
     );
+    const commonOrderFields = { symbol: SYMBOL, positionSide: "BOTH" };
     const marketOrder = {
-      symbol: SYMBOL,
+      ...commonOrderFields,
       type: "MARKET",
       side,
-      positionSide: "BOTH",
       quantity,
       reduceOnly: "false"
     };
     const takeProfitOrder = {
-      symbol: SYMBOL,
+      ...commonOrderFields,
       side: oppositeSide,
-      positionSide: "BOTH",
       type: "TAKE_PROFIT_MARKET",
       timeInForce: "GTE_GTC",
       stopPrice: takeProfitPrice,
@@ -66,9 +83,8 @@ const newOrders = async () => {
       closePosition: "true"
     };
     const stopLossOrder = {
-      symbol: SYMBOL,
+      ...commonOrderFields,
       side: oppositeSide,
-      positionSide: "BOTH",
       type: "STOP_MARKET",
       timeInForce: "GTE_GTC",
       stopPrice: stopLossPrice,
@@ -89,7 +105,9 @@ const newOrders = async () => {
     const response = await binanceFuturesAPI.post(
       `/fapi/v1/batchOrders?${queryString}&signature=${signature}`
     );
-    if (response.data.some((element) => element.code === -4129)) {
+    if (
+      response.data.some((element) => element.code === TIME_IN_FORCE_ERROR_CODE)
+    ) {
       await handleTimeInForceError([takeProfitOrder, stopLossOrder]);
     }
     log(`New orders! ${side} ${quantity}`);
@@ -116,11 +134,14 @@ const setCloseConnect = (ws) => {
   closeConnectTimeoutID = setTimeout(() => {
     ws.close();
     closeConnectTimeoutID = undefined;
-  }, 301000);
+  }, SOCKET_WATCHDOG_TIMEOUT_MS);
 };
+
+let currentWebSocket;
 
 const connectWebSocket = (listenKey) => {
   const ws = new WebSocket(`${WEBSOCKET_BASEURL}/ws/${listenKey}`);
+  currentWebSocket = ws;
 
   ws.on("open", () => {
     log("Socket open!");
@@ -136,9 +157,13 @@ const connectWebSocket = (listenKey) => {
     const eventObj = JSON.parse(event);
 
     if (eventObj.e === "ACCOUNT_UPDATE") {
-      const walletBalance = eventObj.a.B.find(({ a }) => a === QUOTE_ASSET).wb;
-      log(`Wallet balance: ${walletBalance} BUSD`);
-      await sendLineNotify(`Wallet balance: ${walletBalance} BUSD`);
+      const balanceEntry = eventObj.a.B.find(({ a }) => a === QUOTE_ASSET);
+      if (balanceEntry) {
+        log(`Wallet balance: ${balanceEntry.wb} ${QUOTE_ASSET}`);
+        await sendLineNotify(
+          `Wallet balance: ${balanceEntry.wb} ${QUOTE_ASSET}`
+        );
+      }
     }
 
     if (
@@ -178,8 +203,9 @@ const connectWebSocket = (listenKey) => {
     connectWebSocket(listenKey);
   });
 
-  ws.on("error", () => {
+  ws.on("error", (error) => {
     log("Socket error!");
+    console.error(error);
     ws.close();
   });
 };
@@ -187,12 +213,33 @@ const connectWebSocket = (listenKey) => {
 const startUserDataStream = async () => {
   try {
     const response = await binanceFuturesAPI.post("/fapi/v1/listenKey");
-    setInterval(extendListenKeyValidity, 3540000);
+    setInterval(extendListenKeyValidity, LISTEN_KEY_KEEPALIVE_INTERVAL_MS);
     connectWebSocket(response.data.listenKey);
     await newOrders();
   } catch (error) {
     await handleAPIError(error);
   }
 };
+
+const handleFatalError = async (error) => {
+  console.error("Fatal unexpected error:", error);
+  await sendLineNotify("Fatal unexpected error, process exited!");
+  process.exit(1);
+};
+
+process.on("unhandledRejection", handleFatalError);
+process.on("uncaughtException", handleFatalError);
+
+const shutdown = (signal) => {
+  log(`Received ${signal}, shutting down!`);
+  // Drop the close listener first so a manual close doesn't trigger the
+  // auto-reconnect logic in connectWebSocket's "close" handler.
+  currentWebSocket?.removeAllListeners("close");
+  currentWebSocket?.close();
+  process.exit(0);
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
 
 startUserDataStream();
