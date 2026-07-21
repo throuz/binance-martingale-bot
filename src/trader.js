@@ -3,7 +3,7 @@ import {
   getQuantity,
   getOppositeSide,
   getTPSLPrices,
-  getSideFromLongShortRatio,
+  getSide,
   getAvailableQuantity,
   getMinimumQuantity,
   getNextStopLossTimes,
@@ -189,8 +189,12 @@ const createTrader = ({
 
   const openPosition = async (requestedStopLossTimes) => {
     await loadMarketMetadata();
+    const longShortRatioPromise =
+      runtimeConfig.DIRECTION_MODE === "TOP_TRADER_RATIO"
+        ? exchange.getLongShortRatio()
+        : Promise.resolve(undefined);
     const [longShortRatio, markPrice, availableBalance] = await Promise.all([
-      exchange.getLongShortRatio(),
+      longShortRatioPromise,
       exchange.getMarkPrice(),
       exchange.getAvailableBalance(runtimeConfig.QUOTE_ASSET)
     ]);
@@ -219,7 +223,7 @@ const createTrader = ({
       throw new Error("Insufficient available balance for the initial quantity");
     }
 
-    const side = getSideFromLongShortRatio(longShortRatio);
+    const side = getSide(runtimeConfig.DIRECTION_MODE, { longShortRatio });
     await exchange.placeEntryOrder(side, quantity, createClientId("entry"));
     const position = await syncPosition(true);
     try {

@@ -4,6 +4,7 @@ import {
   getQuantity,
   getOppositeSide,
   getTPSLPrices,
+  getSide,
   getSideFromLongShortRatio,
   getAvailableQuantity,
   getMinimumQuantity,
@@ -39,6 +40,13 @@ test("BUY and SELL use mirrored take-profit and stop-loss prices", () => {
 test("long-short ratio selects an order side", () => {
   assert.equal(getSideFromLongShortRatio("1.01"), "BUY");
   assert.equal(getSideFromLongShortRatio("1"), "SELL");
+});
+
+test("direction mode selects a fixed or ratio-based side", () => {
+  assert.equal(getSide("LONG"), "BUY");
+  assert.equal(getSide("SHORT"), "SELL");
+  assert.equal(getSide("TOP_TRADER_RATIO", { longShortRatio: "1.01" }), "BUY");
+  assert.throws(() => getSide("UNKNOWN"), /Invalid direction mode/);
 });
 
 test("available quantity is rounded down to three decimals", () => {

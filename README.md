@@ -16,8 +16,7 @@ its configured `SYMBOL` and may cancel unrelated orders on that symbol.
 
 For each trade, the bot:
 
-1. buys when Binance's top-trader long/short position ratio is above `1`, and
-   sells otherwise;
+1. selects a side from the configured direction mode;
 2. opens a market position;
 3. places one take-profit and one stop-loss order; and
 4. doubles the next quantity after a stop loss, or resets it after a take profit.
@@ -48,9 +47,20 @@ Edit trading settings in `src/config.js`:
 
 ```js
 SYMBOL: "BTCUSDT"
+DIRECTION_MODE: "TOP_TRADER_RATIO"
 MARGIN_TYPE: "ISOLATED"
 TP_SL_RATE: 0.1 // 10% intended return on margin
 ```
+
+`DIRECTION_MODE` supports:
+
+- `LONG`: always open a long;
+- `SHORT`: always open a short; or
+- `TOP_TRADER_RATIO`: long when Binance's top-trader position ratio is above
+  `1`, otherwise short.
+
+Direction selection is isolated in `src/strategy.js`, so another signal can be
+added without changing order execution or risk recovery.
 
 Quote asset, maximum leverage, initial quantity, symbol precision, minimum
 notional, and taker fee are loaded automatically from Binance. `TP_SL_RATE`

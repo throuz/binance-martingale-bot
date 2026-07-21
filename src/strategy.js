@@ -54,6 +54,15 @@ const getTPSLPrices = (side, stopLossTimes, markPrice, config) => {
 const getSideFromLongShortRatio = (longShortRatio) =>
   Number(longShortRatio) > 1 ? "BUY" : "SELL";
 
+const getSide = (directionMode, { longShortRatio } = {}) => {
+  if (directionMode === "LONG") return "BUY";
+  if (directionMode === "SHORT") return "SELL";
+  if (directionMode === "TOP_TRADER_RATIO") {
+    return getSideFromLongShortRatio(longShortRatio);
+  }
+  throw new Error(`Invalid direction mode: ${directionMode}`);
+};
+
 const getAvailableQuantity = (
   availableBalance,
   markPrice,
@@ -92,6 +101,7 @@ export {
   normalizeQuantityUp,
   normalizePrice,
   getTPSLPrices,
+  getSide,
   getSideFromLongShortRatio,
   getAvailableQuantity,
   getMinimumQuantity,

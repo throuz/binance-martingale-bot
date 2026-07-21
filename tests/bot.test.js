@@ -4,6 +4,7 @@ import { createBot } from "../src/bot.js";
 
 const tradeConfig = {
   SYMBOL: "BTCUSDT",
+  DIRECTION_MODE: "TOP_TRADER_RATIO",
   MARGIN_TYPE: "ISOLATED",
   TP_SL_RATE: 0.1
 };
@@ -81,6 +82,42 @@ test("start configures a flat account and opens one protected position", async (
     calls.filter(([type]) => type === "algo").map(([, order]) => order.type),
     ["TAKE_PROFIT_MARKET", "STOP_MARKET"]
   );
+});
+
+test("LONG mode always opens a long without querying the ratio", async (t) => {
+  const { calls, exchange, notifier } = createDependencies();
+  exchange.getLongShortRatio = async () => {
+    throw new Error("ratio should not be queried");
+  };
+  const bot = createBot({
+    exchange,
+    notifier,
+    log: () => {},
+    tradeConfig: { ...tradeConfig, DIRECTION_MODE: "LONG" }
+  });
+  t.after(bot.stop);
+
+  await bot.start();
+
+  assert.ok(calls.some((call) => call[0] === "entry" && call[1] === "BUY"));
+});
+
+test("SHORT mode always opens a short without querying the ratio", async (t) => {
+  const { calls, exchange, notifier } = createDependencies();
+  exchange.getLongShortRatio = async () => {
+    throw new Error("ratio should not be queried");
+  };
+  const bot = createBot({
+    exchange,
+    notifier,
+    log: () => {},
+    tradeConfig: { ...tradeConfig, DIRECTION_MODE: "SHORT" }
+  });
+  t.after(bot.stop);
+
+  await bot.start();
+
+  assert.ok(calls.some((call) => call[0] === "entry" && call[1] === "SELL"));
 });
 
 test("restart adopts an existing position instead of opening another", async (t) => {
