@@ -1,4 +1,3 @@
-import WebSocket from "ws";
 import env from "./src/env.js";
 import tradeConfig from "./src/trade-config.js";
 import { binanceRequest } from "./src/api-clients.js";
@@ -15,7 +14,13 @@ const { WEBSOCKET_BASEURL } = env;
 const { QUOTE_ASSET, SYMBOL } = tradeConfig;
 
 const LISTEN_KEY_KEEPALIVE_INTERVAL_MS = 3540000; // 59 minutes
-const SOCKET_WATCHDOG_TIMEOUT_MS = 301000; // ~5 minutes without a ping
+// Native WebSocket auto-replies to ping frames at the transport layer and
+// doesn't expose them to application code, so this watchdog resets on any
+// inbound message instead of specifically on pings. During a truly idle
+// account (no ACCOUNT_UPDATE/ORDER_TRADE_UPDATE/ALGO_UPDATE for 5+ minutes)
+// this will reconnect unnecessarily - a deliberate tradeoff for staying
+// dependency-free instead of pulling in `ws` for raw ping-frame visibility.
+const SOCKET_WATCHDOG_TIMEOUT_MS = 301000; // ~5 minutes without any message
 const MAX_PROTECTIVE_ORDER_RETRIES = 5;
 const PROTECTIVE_ORDER_RETRY_DELAY_MS = 500;
 // STOP_MARKET/TAKE_PROFIT_MARKET fills still arrive as ORDER_TRADE_UPDATE once
@@ -134,6 +139,7 @@ const setCloseConnect = (ws) => {
 };
 
 let currentWebSocket;
+let isShuttingDown = false;
 
 const connectWebSocket = (listenKey) => {
   // Legacy `${WEBSOCKET_BASEURL}/ws/<listenKey>` URLs were decommissioned
@@ -144,18 +150,15 @@ const connectWebSocket = (listenKey) => {
   );
   currentWebSocket = ws;
 
-  ws.on("open", () => {
+  ws.addEventListener("open", () => {
     log("Socket open!");
     setCloseConnect(ws);
   });
 
-  ws.on("ping", () => {
+  ws.addEventListener("message", async (event) => {
     setCloseConnect(ws);
-    ws.pong();
-  });
 
-  ws.on("message", async (event) => {
-    const eventObj = JSON.parse(event);
+    const eventObj = JSON.parse(event.data);
 
     if (eventObj.e === "ACCOUNT_UPDATE") {
       const balanceEntry = eventObj.a.B.find(({ a }) => a === QUOTE_ASSET);
@@ -214,14 +217,16 @@ const connectWebSocket = (listenKey) => {
     }
   });
 
-  ws.on("close", () => {
+  ws.addEventListener("close", () => {
     log("Socket close!");
-    connectWebSocket(listenKey);
+    if (!isShuttingDown) {
+      connectWebSocket(listenKey);
+    }
   });
 
-  ws.on("error", (error) => {
+  ws.addEventListener("error", (event) => {
     log("Socket error!");
-    console.error(error);
+    console.error(event.message ?? event);
     ws.close();
   });
 };
@@ -253,9 +258,9 @@ process.on("uncaughtException", handleFatalError);
 
 const shutdown = (signal) => {
   log(`Received ${signal}, shutting down!`);
-  // Drop the close listener first so a manual close doesn't trigger the
-  // auto-reconnect logic in connectWebSocket's "close" handler.
-  currentWebSocket?.removeAllListeners("close");
+  // Native WebSocket has no removeAllListeners, so a flag suppresses the
+  // auto-reconnect logic in connectWebSocket's "close" handler instead.
+  isShuttingDown = true;
   currentWebSocket?.close();
   process.exit(0);
 };

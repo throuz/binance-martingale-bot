@@ -6,17 +6,13 @@ Binance Futures BOT is an automated trading robot specialized in Binance Futures
 
 Make sure the cross wallet has a certain amount of USDT (see `QUOTE_ASSET` in `src/trade-config.js`).
 
-Install dependencies (only [`ws`](https://github.com/websockets/ws) — everything else uses Node's built-in `fetch`).
-
-```
-npm i
-```
+This bot has zero npm dependencies — it only uses Node's built-in `fetch` and `WebSocket` (both require **Node 22+**), so `npm i` has nothing to install.
 
 Copy the example env files and fill in your own values. Both files are gitignored so your credentials never get committed.
 
 ```
-cp .env.development.example .env.development
-cp .env.production.example .env.production
+cp .env.testnet.example .env.testnet
+cp .env.mainnet.example .env.mainnet
 ```
 
 Each file needs:
@@ -24,13 +20,13 @@ Each file needs:
 ```
 API_KEY=...
 SECRET_KEY=...
-REST_BASEURL=...
-WEBSOCKET_BASEURL=...
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
 ```
 
-`API_KEY` / `SECRET_KEY` come from your Binance Futures API key (use a [Testnet](https://testnet.binancefuture.com) key for `.env.development`). To get the Telegram values:
+(`REST_BASEURL`/`WEBSOCKET_BASEURL` aren't in the env files — they only ever take one of two fixed values, so `src/env.js` picks the right pair automatically based on `NODE_ENV`, which the npm scripts already set.)
+
+`API_KEY` / `SECRET_KEY` come from your Binance Futures API key (use a [Testnet](https://testnet.binancefuture.com) key for `.env.testnet`). To get the Telegram values:
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram, run `/newbot`, and copy the token it gives you into `TELEGRAM_BOT_TOKEN`.
 2. Send your new bot any message, then open `https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates` in a browser and copy the `chat.id` value into `TELEGRAM_CHAT_ID`.
@@ -38,15 +34,15 @@ TELEGRAM_CHAT_ID=...
 The npm scripts load the right file automatically via Node's built-in `--env-file` flag — no extra config-loading code needed:
 
 ```
-"start:dev": "TZ=Asia/Taipei NODE_ENV=development node --env-file=.env.development app",
-"start:prod": "TZ=Asia/Taipei NODE_ENV=production node --env-file=.env.production app"
+"start:dev": "TZ=Asia/Taipei NODE_ENV=development node --env-file=.env.testnet app",
+"start:prod": "TZ=Asia/Taipei NODE_ENV=production node --env-file=.env.mainnet app"
 ```
 
 ## Strategy
 
 This automatic trading strategy is improved based on the martingale strategy. Take profit / stop loss distance for each order is controlled by `TP_SL_RATE` in `src/trade-config.js` (plus a small buffer to cover leverage and trading fees). If the stop loss triggers, the next order is automatically placed at twice the quantity of the previous one; once the quantity would exceed the available funds, it resets back to the initial quantity.
 
-Take profit / stop loss orders are placed as conditional (algo) orders via `POST /fapi/v1/algoOrder`, per Binance's migration of `STOP_MARKET` / `TAKE_PROFIT_MARKET` off the regular order endpoint (effective 2025-12-09). **Strongly recommended: run against Testnet first** (`.env.development`) and confirm orders/notifications behave as expected before pointing this at a live account — Binance has changed several parts of the Futures API this bot depends on recently, and this hasn't been battle-tested against a live order book.
+Take profit / stop loss orders are placed as conditional (algo) orders via `POST /fapi/v1/algoOrder`, per Binance's migration of `STOP_MARKET` / `TAKE_PROFIT_MARKET` off the regular order endpoint (effective 2025-12-09). **Strongly recommended: run against Testnet first** (`.env.testnet`) and confirm orders/notifications behave as expected before pointing this at a live account — Binance has changed several parts of the Futures API this bot depends on recently, and this hasn't been battle-tested against a live order book. In particular, connection-loss detection relies on any inbound user-data message resetting a 5-minute watchdog rather than raw WebSocket ping frames (Node's native `WebSocket` doesn't expose those) — during a genuinely quiet account this may reconnect somewhat more eagerly than strictly necessary, which is expected.
 
 ## Contributing
 
