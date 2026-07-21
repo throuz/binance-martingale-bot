@@ -32,16 +32,15 @@ test("signed exchange requests include authentication and a signature", async (t
   assert.equal(capturedRequest.options.headers["X-MBX-APIKEY"], env.API_KEY);
 });
 
-test("available quantity combines balance and mark-price responses", async (t) => {
+test("available balance selects the configured quote asset", async (t) => {
   t.mock.method(globalThis, "fetch", async (url) => {
-    const path = new URL(url).pathname;
-    const body =
-      path === "/fapi/v1/balance"
-        ? [{ asset: "USDT", withdrawAvailable: "10" }]
-        : { markPrice: "60000" };
-    return new Response(JSON.stringify(body), { status: 200 });
+    assert.equal(new URL(url).pathname, "/fapi/v1/balance");
+    return new Response(
+      JSON.stringify([{ asset: "USDT", withdrawAvailable: "10" }]),
+      { status: 200 }
+    );
   });
 
   const exchange = createExchange(env, tradeConfig);
-  assert.equal(await exchange.getAvailableQuantity(), 0.02);
+  assert.equal(await exchange.getAvailableBalance(), "10");
 });

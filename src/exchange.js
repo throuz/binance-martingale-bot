@@ -1,18 +1,7 @@
 import { createHmac } from "node:crypto";
-import { getAvailableQuantity, getSideFromLongShortRatio } from "./strategy.js";
+import { HttpError } from "./http-error.js";
 
 const REQUEST_TIMEOUT_MS = 10000;
-
-class HttpError extends Error {
-  constructor(message, { status, body, method, path }) {
-    super(message);
-    this.name = "HttpError";
-    this.status = status;
-    this.body = body;
-    this.method = method;
-    this.path = path;
-  }
-}
 
 const createExchange = (env, tradeConfig) => {
   const sign = (queryString) =>
@@ -56,17 +45,16 @@ const createExchange = (env, tradeConfig) => {
   };
 
   return {
-    request,
     getMarkPrice,
-    getSide: async () => {
+    getLongShortRatio: async () => {
       const [{ longShortRatio }] = await request(
         "GET",
         "/futures/data/topLongShortPositionRatio",
         { symbol: tradeConfig.SYMBOL, period: "5m", limit: "1" }
       );
-      return getSideFromLongShortRatio(longShortRatio);
+      return longShortRatio;
     },
-    getAvailableQuantity: async () => {
+    getAvailableBalance: async () => {
       const balances = await request(
         "GET",
         "/fapi/v1/balance",
@@ -76,12 +64,12 @@ const createExchange = (env, tradeConfig) => {
       const balanceEntry = balances.find(
         ({ asset }) => asset === tradeConfig.QUOTE_ASSET
       );
-      const markPrice = await getMarkPrice();
-      return getAvailableQuantity(
-        balanceEntry.withdrawAvailable,
-        markPrice,
-        tradeConfig.LEVERAGE
-      );
+      if (!balanceEntry) {
+        throw new Error(
+          `Balance response does not include ${tradeConfig.QUOTE_ASSET}`
+        );
+      }
+      return balanceEntry.withdrawAvailable;
     },
     placeEntryOrder: (side, quantity) =>
       request(
@@ -111,26 +99,4 @@ const createExchange = (env, tradeConfig) => {
   };
 };
 
-// Keep the Telegram token out of thrown URLs and logs.
-const sendTelegramMessage = async (env, text) => {
-  const response = await fetch(
-    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text }),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-    }
-  );
-  if (!response.ok) {
-    const body = await response.json().catch(() => undefined);
-    throw new HttpError(`Telegram sendMessage ${response.status}`, {
-      status: response.status,
-      body,
-      method: "POST",
-      path: "/sendMessage"
-    });
-  }
-};
-
-export { createExchange, sendTelegramMessage, HttpError };
+export { createExchange };

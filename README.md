@@ -32,6 +32,19 @@ Run the strategy and risk-control tests with:
 npm test
 ```
 
+## Project Structure
+
+```
+app.js                    # Minimal process entry point
+src/application.js        # Dependency wiring and process lifecycle
+src/bot.js                # Trading workflow and user-data event handling
+src/user-data-stream.js   # Binance WebSocket lifecycle
+src/exchange.js           # Binance REST API client
+src/notifier.js           # Telegram notifications
+src/strategy.js           # Pure strategy and risk calculations
+src/config.js             # Network, credentials, and trading configuration
+```
+
 `API_KEY` / `SECRET_KEY` come from your Binance Futures API key (use a [Testnet](https://testnet.binancefuture.com) key for `.env.testnet`). To get the Telegram values:
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram, run `/newbot`, and copy the token it gives you into `TELEGRAM_BOT_TOKEN`.

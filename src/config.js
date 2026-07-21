@@ -36,12 +36,10 @@ const env = {
   SECRET_KEY: process.env.SECRET_KEY,
   TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
   TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
-  BINANCE_NETWORK: network,
   ...urls
 };
 
 const tradeConfig = {
-  BASE_ASSET: "BTC",
   QUOTE_ASSET: "USDT",
   SYMBOL: "BTCUSDT",
   LEVERAGE: 125,
