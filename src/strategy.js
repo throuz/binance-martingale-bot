@@ -17,6 +17,9 @@ const formatToStep = (value, step, rounding) => {
 const normalizeQuantity = (quantity, stepSize = "0.001") =>
   formatToStep(quantity, stepSize, Math.floor);
 
+const normalizeQuantityUp = (quantity, stepSize = "0.001") =>
+  formatToStep(quantity, stepSize, Math.ceil);
+
 const normalizePrice = (price, tickSize = "0.1") =>
   formatToStep(price, tickSize, Math.round);
 
@@ -61,6 +64,17 @@ const getAvailableQuantity = (
   return Number(normalizeQuantity(availableFunds / markPrice, stepSize));
 };
 
+const getMinimumQuantity = (
+  minQuantity,
+  minNotional,
+  markPrice,
+  stepSize = "0.001"
+) =>
+  normalizeQuantityUp(
+    Math.max(Number(minQuantity), Number(minNotional) / Number(markPrice)),
+    stepSize
+  );
+
 const getNextStopLossTimes = (
   currentStopLossTimes,
   availableQuantity,
@@ -75,9 +89,11 @@ export {
   getQuantity,
   getOppositeSide,
   normalizeQuantity,
+  normalizeQuantityUp,
   normalizePrice,
   getTPSLPrices,
   getSideFromLongShortRatio,
   getAvailableQuantity,
+  getMinimumQuantity,
   getNextStopLossTimes
 };

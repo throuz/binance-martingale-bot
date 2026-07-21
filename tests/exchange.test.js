@@ -9,8 +9,7 @@ const env = {
 };
 const tradeConfig = {
   SYMBOL: "BTCUSDT",
-  QUOTE_ASSET: "USDT",
-  LEVERAGE: 125
+  MARGIN_TYPE: "ISOLATED"
 };
 
 test("signed exchange requests include authentication and a signature", async (t) => {
@@ -42,7 +41,7 @@ test("available balance selects the configured quote asset", async (t) => {
   });
 
   const exchange = createExchange(env, tradeConfig);
-  assert.equal(await exchange.getAvailableBalance(), "10");
+  assert.equal(await exchange.getAvailableBalance("USDT"), "10");
 });
 
 test("symbol rules use Binance market quantity and price filters", async (t) => {
@@ -52,12 +51,14 @@ test("symbol rules use Binance market quantity and price filters", async (t) => 
         symbols: [
           {
             symbol: "BTCUSDT",
+            quoteAsset: "USDT",
             filters: [
               {
                 filterType: "MARKET_LOT_SIZE",
                 minQty: "0.001",
                 stepSize: "0.001"
               },
+              { filterType: "MIN_NOTIONAL", notional: "5" },
               { filterType: "PRICE_FILTER", tickSize: "0.10" }
             ]
           }
@@ -69,8 +70,30 @@ test("symbol rules use Binance market quantity and price filters", async (t) => 
 
   const exchange = createExchange(env, tradeConfig);
   assert.deepEqual(await exchange.getSymbolRules(), {
+    quoteAsset: "USDT",
     minQuantity: "0.001",
+    minNotional: "5",
     stepSize: "0.001",
     tickSize: "0.10"
   });
+});
+
+test("maximum leverage is read from the symbol leverage brackets", async (t) => {
+  t.mock.method(globalThis, "fetch", async () =>
+    new Response(
+      JSON.stringify([
+        {
+          symbol: "BTCUSDT",
+          brackets: [
+            { initialLeverage: 125 },
+            { initialLeverage: 100 }
+          ]
+        }
+      ]),
+      { status: 200 }
+    )
+  );
+
+  const exchange = createExchange(env, tradeConfig);
+  assert.equal(await exchange.getMaximumLeverage(), 125);
 });

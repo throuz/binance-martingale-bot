@@ -4,12 +4,8 @@ import { createBot } from "../src/bot.js";
 
 const tradeConfig = {
   SYMBOL: "BTCUSDT",
-  QUOTE_ASSET: "USDT",
-  LEVERAGE: 125,
-  MARGIN_TYPE: "CROSSED",
-  FEE_RATE: 0.0004,
-  TP_SL_RATE: 0.1,
-  INITIAL_QUANTITY: 0.001
+  MARGIN_TYPE: "ISOLATED",
+  TP_SL_RATE: 0.1
 };
 
 const createDependencies = () => {
@@ -17,15 +13,18 @@ const createDependencies = () => {
   const state = { position: null, algoOrders: [], orders: [] };
   const exchange = {
     getSymbolRules: async () => ({
+      quoteAsset: "USDT",
       stepSize: "0.001",
       minQuantity: "0.001",
+      minNotional: "5",
       tickSize: "0.1"
     }),
+    getMaximumLeverage: async () => 125,
     getCommissionRate: async () => ({ takerCommissionRate: "0.0004" }),
     getPosition: async () => state.position,
     getPositionMode: async () => ({ dualSidePosition: false }),
     setOneWayMode: async () => calls.push(["one-way"]),
-    setLeverage: async () => calls.push(["leverage"]),
+    setLeverage: async (leverage) => calls.push(["leverage", leverage]),
     setMarginType: async () => calls.push(["margin"]),
     getOpenOrders: async () => state.orders,
     getOpenAlgoOrders: async () => state.algoOrders,
@@ -39,7 +38,10 @@ const createDependencies = () => {
     },
     getLongShortRatio: async () => "1.1",
     getMarkPrice: async () => "100000",
-    getAvailableBalance: async () => "100",
+    getAvailableBalance: async (asset) => {
+      assert.equal(asset, "USDT");
+      return "100";
+    },
     placeEntryOrder: async (side, quantity) => {
       calls.push(["entry", side, quantity]);
       state.position = {
@@ -86,7 +88,8 @@ test("restart adopts an existing position instead of opening another", async (t)
   state.position = {
     positionSide: "BOTH",
     positionAmt: "0.002",
-    entryPrice: "100000"
+    entryPrice: "100000",
+    marginType: "isolated"
   };
   const bot = createBot({ exchange, notifier, log: () => {}, tradeConfig });
   t.after(bot.stop);
@@ -95,6 +98,19 @@ test("restart adopts an existing position instead of opening another", async (t)
 
   assert.equal(calls.some(([type]) => type === "entry"), false);
   assert.equal(calls.filter(([type]) => type === "algo").length, 2);
+});
+
+test("an existing Cross Margin position is not adopted", async () => {
+  const { state, exchange, notifier } = createDependencies();
+  state.position = {
+    positionSide: "BOTH",
+    positionAmt: "0.001",
+    entryPrice: "100000",
+    marginType: "cross"
+  };
+  const bot = createBot({ exchange, notifier, log: () => {}, tradeConfig });
+
+  await assert.rejects(bot.reconcile(), /close it before switching to ISOLATED/);
 });
 
 test("a stop loss advances the martingale quantity", async (t) => {

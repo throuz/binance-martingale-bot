@@ -6,6 +6,7 @@ import {
   getTPSLPrices,
   getSideFromLongShortRatio,
   getAvailableQuantity,
+  getMinimumQuantity,
   getNextStopLossTimes,
   normalizeQuantity,
   normalizePrice
@@ -47,6 +48,11 @@ test("available quantity is rounded down to three decimals", () => {
 test("quantity and price follow exchange step sizes", () => {
   assert.equal(normalizeQuantity(1.239, "0.01"), "1.23");
   assert.equal(normalizePrice(100.24, "0.5"), "100.0");
+});
+
+test("minimum quantity satisfies quantity and notional filters", () => {
+  assert.equal(getMinimumQuantity("0.001", "5", "100000", "0.001"), "0.001");
+  assert.equal(getMinimumQuantity("0.01", "5", "20", "0.01"), "0.25");
 });
 
 test("stop-loss count resets when the next order is unaffordable", () => {

@@ -5,6 +5,7 @@ import {
   getTPSLPrices,
   getSideFromLongShortRatio,
   getAvailableQuantity,
+  getMinimumQuantity,
   getNextStopLossTimes,
   normalizeQuantity
 } from "./strategy.js";
@@ -13,6 +14,7 @@ const MAX_ORDER_RETRIES = 5;
 const ORDER_RETRY_DELAY_MS = 500;
 const POSITION_SYNC_ATTEMPTS = 20;
 const POSITION_SYNC_DELAY_MS = 500;
+const FALLBACK_TAKER_FEE_RATE = 0.0005;
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const createClientId = (purpose) =>
   `martingale-${purpose}-${randomUUID().slice(0, 8)}`;
@@ -33,17 +35,37 @@ const createTrader = ({
 
   const loadMarketMetadata = async () => {
     if (symbolRules) return;
-    const [rules, commission] = await Promise.all([
+    const [rules, maximumLeverage, markPrice, commission] = await Promise.all([
       exchange.getSymbolRules(),
-      exchange.getCommissionRate()
+      exchange.getMaximumLeverage(),
+      exchange.getMarkPrice(),
+      exchange.getCommissionRate().catch(() => null)
     ]);
     symbolRules = rules;
     runtimeConfig = {
       ...tradeConfig,
-      FEE_RATE: Number(commission.takerCommissionRate ?? tradeConfig.FEE_RATE),
+      QUOTE_ASSET: rules.quoteAsset,
+      LEVERAGE: maximumLeverage,
+      FEE_RATE: Number(
+        commission?.takerCommissionRate ?? FALLBACK_TAKER_FEE_RATE
+      ),
+      INITIAL_QUANTITY: Number(
+        getMinimumQuantity(
+          rules.minQuantity,
+          rules.minNotional,
+          markPrice,
+          rules.stepSize
+        )
+      ),
       TICK_SIZE: rules.tickSize
     };
+    log(
+      `Loaded ${tradeConfig.SYMBOL}: ${runtimeConfig.INITIAL_QUANTITY} minimum quantity, ` +
+        `${runtimeConfig.LEVERAGE}x leverage, ${runtimeConfig.QUOTE_ASSET} collateral.`
+    );
   };
+
+  const getRuntimeConfig = () => runtimeConfig;
 
   const syncPosition = async (shouldBeOpen) => {
     for (let attempt = 0; attempt < POSITION_SYNC_ATTEMPTS; attempt += 1) {
@@ -170,7 +192,7 @@ const createTrader = ({
     const [longShortRatio, markPrice, availableBalance] = await Promise.all([
       exchange.getLongShortRatio(),
       exchange.getMarkPrice(),
-      exchange.getAvailableBalance()
+      exchange.getAvailableBalance(runtimeConfig.QUOTE_ASSET)
     ]);
     const availableQuantity = getAvailableQuantity(
       availableBalance,
@@ -216,7 +238,7 @@ const createTrader = ({
     await syncPosition(false);
     if (!isStopLoss) return 0;
     const [availableBalance, markPrice] = await Promise.all([
-      exchange.getAvailableBalance(),
+      exchange.getAvailableBalance(runtimeConfig.QUOTE_ASSET),
       exchange.getMarkPrice()
     ]);
     return getNextStopLossTimes(
@@ -233,6 +255,7 @@ const createTrader = ({
 
   return {
     loadMarketMetadata,
+    getRuntimeConfig,
     inferStopLossTimes,
     ensureProtection,
     openPosition,

@@ -18,7 +18,17 @@ const createReconciler = ({ exchange, trader }) => {
       throw new Error("Cannot switch an open Hedge Mode position to One-way Mode");
     }
     if (isHedgeMode) await exchange.setOneWayMode();
-    await exchange.setLeverage();
+    if (
+      isOpenPosition(position) &&
+      position.marginType &&
+      position.marginType.toUpperCase() !== trader.getRuntimeConfig().MARGIN_TYPE
+    ) {
+      throw new Error(
+        `Existing position uses ${position.marginType.toUpperCase()} margin; ` +
+          `close it before switching to ${trader.getRuntimeConfig().MARGIN_TYPE}`
+      );
+    }
+    await exchange.setLeverage(trader.getRuntimeConfig().LEVERAGE);
     if (!isOpenPosition(position)) {
       try {
         await exchange.setMarginType();

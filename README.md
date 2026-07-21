@@ -22,15 +22,16 @@ For each trade, the bot:
 3. places one take-profit and one stop-loss order; and
 4. doubles the next quantity after a stop loss, or resets it after a take profit.
 
-With `INITIAL_QUANTITY: 0.001`, quantities progress as follows:
+If Binance's calculated minimum quantity is `0.001`, quantities progress as
+follows:
 
 ```text
 0.001 → 0.002 → 0.004 → 0.008 → ...
 ```
 
-`INITIAL_QUANTITY` is a base quantity, not a fixed USDT cost or guaranteed
-profit. It must satisfy the selected symbol's minimum quantity and step size.
-The required margin changes with the price, leverage, and quantity.
+The initial quantity is not a fixed USDT cost or guaranteed profit. At startup,
+the bot derives the smallest valid market quantity from Binance's minimum
+quantity, step size, minimum notional, and current mark price.
 
 `TP_SL_RATE` is the intended return on margin for one successful cycle before
 funding, slippage, and rounding—not a price-change percentage. The bot converts
@@ -40,18 +41,20 @@ stop-losses and fees. Recovery is not guaranteed.
 
 If the next doubled quantity is unaffordable, the sequence resets to the initial
 quantity. This limits one sequence but does not prevent liquidation or total
-loss, especially with Cross Margin and high leverage.
+loss. The bot uses Isolated Margin so one position does not use the rest of the
+Futures wallet as shared collateral.
 
 Edit trading settings in `src/config.js`:
 
 ```js
 SYMBOL: "BTCUSDT"
-LEVERAGE: 125
-MARGIN_TYPE: "CROSSED"
-FEE_RATE: 0.0004 // fallback when Binance does not return a taker fee
-TP_SL_RATE: 0.1  // 10% intended return on margin
-INITIAL_QUANTITY: 0.001
+MARGIN_TYPE: "ISOLATED"
+TP_SL_RATE: 0.1 // 10% intended return on margin
 ```
+
+Quote asset, maximum leverage, initial quantity, symbol precision, minimum
+notional, and taker fee are loaded automatically from Binance. `TP_SL_RATE`
+remains explicit because it is a strategy decision rather than exchange data.
 
 ## Run on Testnet
 
@@ -88,16 +91,17 @@ files are ignored by Git.
 
 The bot uses Binance REST and user-data WebSocket APIs. It automatically:
 
-- configures One-way Mode, leverage, and margin type when safe;
-- reads the symbol's quantity and price rules and the account's taker fee;
+- configures One-way Mode, maximum available leverage, and Isolated Margin;
+- reads the symbol's assets, order rules, and the account's taker fee;
 - adopts an existing One-way position after restart;
 - restores missing take-profit or stop-loss protection;
 - removes stale orders before opening a new position;
 - reconciles every minute and after WebSocket reconnection; and
 - attempts an emergency close if protection cannot be established.
 
-An open Hedge Mode position is rejected because it cannot be converted safely.
-Always inspect Binance after a fatal error.
+An open Hedge Mode or Cross Margin position is rejected because it cannot be
+converted safely. Close it before starting this Isolated Margin bot. Always
+inspect Binance after a fatal error.
 
 ## Structure
 

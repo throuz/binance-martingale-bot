@@ -43,13 +43,9 @@ const env = {
 };
 
 const tradeConfig = {
-  QUOTE_ASSET: "USDT",
   SYMBOL: "BTCUSDT",
-  LEVERAGE: 125,
-  MARGIN_TYPE: "CROSSED",
-  FEE_RATE: 0.0004,
-  TP_SL_RATE: 0.1,
-  INITIAL_QUANTITY: 0.001
+  MARGIN_TYPE: "ISOLATED",
+  TP_SL_RATE: 0.1
 };
 
 export { env, tradeConfig };

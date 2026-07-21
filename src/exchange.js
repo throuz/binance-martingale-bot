@@ -54,14 +54,34 @@ const createExchange = (env, tradeConfig) => {
         symbol.filters.find(({ filterType }) => filterType === type);
       const quantityFilter = filter("MARKET_LOT_SIZE") ?? filter("LOT_SIZE");
       const priceFilter = filter("PRICE_FILTER");
+      const notionalFilter = filter("MIN_NOTIONAL");
       if (!quantityFilter || !priceFilter) {
         throw new Error(`Incomplete exchange filters for ${tradeConfig.SYMBOL}`);
       }
       return {
+        quoteAsset: symbol.quoteAsset,
         stepSize: quantityFilter.stepSize,
         minQuantity: quantityFilter.minQty,
+        minNotional: notionalFilter?.notional ?? "0",
         tickSize: priceFilter.tickSize
       };
+    },
+    getMaximumLeverage: async () => {
+      const brackets = await request(
+        "GET",
+        "/fapi/v1/leverageBracket",
+        { symbol: tradeConfig.SYMBOL },
+        { signed: true }
+      );
+      const symbolBrackets = Array.isArray(brackets) ? brackets[0] : brackets;
+      const leverages = symbolBrackets?.brackets?.map(({ initialLeverage }) =>
+        Number(initialLeverage)
+      );
+      const maximumLeverage = leverages?.length ? Math.max(...leverages) : NaN;
+      if (!Number.isFinite(maximumLeverage) || maximumLeverage < 1) {
+        throw new Error(`Invalid leverage brackets for ${tradeConfig.SYMBOL}`);
+      }
+      return maximumLeverage;
     },
     getCommissionRate: () =>
       request(
@@ -79,11 +99,11 @@ const createExchange = (env, tradeConfig) => {
         { dualSidePosition: "false" },
         { signed: true }
       ),
-    setLeverage: () =>
+    setLeverage: (leverage) =>
       request(
         "POST",
         "/fapi/v1/leverage",
-        { symbol: tradeConfig.SYMBOL, leverage: tradeConfig.LEVERAGE },
+        { symbol: tradeConfig.SYMBOL, leverage },
         { signed: true }
       ),
     setMarginType: () =>
@@ -142,7 +162,7 @@ const createExchange = (env, tradeConfig) => {
       );
       return longShortRatio;
     },
-    getAvailableBalance: async () => {
+    getAvailableBalance: async (quoteAsset) => {
       const balances = await request(
         "GET",
         "/fapi/v3/balance",
@@ -150,11 +170,11 @@ const createExchange = (env, tradeConfig) => {
         { signed: true }
       );
       const balanceEntry = balances.find(
-        ({ asset }) => asset === tradeConfig.QUOTE_ASSET
+        ({ asset }) => asset === quoteAsset
       );
       if (!balanceEntry) {
         throw new Error(
-          `Balance response does not include ${tradeConfig.QUOTE_ASSET}`
+          `Balance response does not include ${quoteAsset}`
         );
       }
       const availableBalance =

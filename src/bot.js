@@ -58,8 +58,9 @@ const createBot = ({
   const handleEvent = (event) =>
     serialize(async () => {
       if (event.e === "ACCOUNT_UPDATE") {
-        const balance = event.a.B.find(({ a }) => a === tradeConfig.QUOTE_ASSET);
-        if (balance) log(`Wallet balance: ${balance.wb} ${tradeConfig.QUOTE_ASSET}`);
+        const { QUOTE_ASSET } = trader.getRuntimeConfig();
+        const balance = event.a.B.find(({ a }) => a === QUOTE_ASSET);
+        if (balance) log(`Wallet balance: ${balance.wb} ${QUOTE_ASSET}`);
         return;
       }
 
